@@ -1,0 +1,836 @@
+import 'dart:io';
+
+import 'package:args/args.dart';
+import 'package:mason_logger/mason_logger.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:path/path.dart' as p;
+import 'package:scoped_deps/scoped_deps.dart';
+import 'package:pub_semver/pub_semver.dart';
+import 'package:quickpatch_cli/src/artifact_builder/artifact_builder.dart';
+import 'package:quickpatch_cli/src/artifact_manager.dart';
+import 'package:quickpatch_cli/src/code_push_client_wrapper.dart';
+import 'package:quickpatch_cli/src/code_signer.dart';
+import 'package:quickpatch_cli/src/commands/release/aar_releaser.dart';
+import 'package:quickpatch_cli/src/common_arguments.dart';
+import 'package:quickpatch_cli/src/engine_config.dart';
+import 'package:quickpatch_cli/src/logging/logging.dart';
+import 'package:quickpatch_cli/src/metadata/metadata.dart';
+import 'package:quickpatch_cli/src/os/operating_system_interface.dart';
+import 'package:quickpatch_cli/src/platform/platform.dart';
+import 'package:quickpatch_cli/src/release_type.dart';
+import 'package:quickpatch_cli/src/quickpatch_android_artifacts.dart';
+import 'package:quickpatch_cli/src/quickpatch_env.dart';
+import 'package:quickpatch_cli/src/quickpatch_flutter.dart';
+import 'package:quickpatch_cli/src/quickpatch_process.dart';
+import 'package:quickpatch_cli/src/quickpatch_validator.dart';
+import 'package:quickpatch_code_push_client/quickpatch_code_push_client.dart';
+import 'package:test/test.dart';
+
+import '../../matchers.dart';
+import '../../mocks.dart';
+
+void main() {
+  group(AarReleaser, () {
+    const packageName = 'com.example.my_flutter_module';
+    const buildNumber = '1.0';
+
+    late ArgResults argResults;
+    late ArtifactBuilder artifactBuilder;
+    late ArtifactManager artifactManager;
+    late CodePushClientWrapper codePushClientWrapper;
+    late CodeSigner codeSigner;
+    late Directory projectRoot;
+    late QuickPatchLogger logger;
+    late OperatingSystemInterface operatingSystemInterface;
+    late Progress progress;
+    late QuickPatchProcess quickpatchProcess;
+    late QuickPatchEnv quickpatchEnv;
+    late QuickPatchFlutter quickpatchFlutter;
+    late QuickPatchValidator quickpatchValidator;
+    late QuickPatchAndroidArtifacts quickpatchAndroidArtifacts;
+    late AarReleaser aarReleaser;
+
+    R runWithOverrides<R>(R Function() body) {
+      return runScoped(
+        body,
+        values: {
+          artifactBuilderRef.overrideWith(() => artifactBuilder),
+          artifactManagerRef.overrideWith(() => artifactManager),
+          codePushClientWrapperRef.overrideWith(() => codePushClientWrapper),
+          codeSignerRef.overrideWith(() => codeSigner),
+          engineConfigRef.overrideWith(() => const EngineConfig.empty()),
+          loggerRef.overrideWith(() => logger),
+          osInterfaceRef.overrideWith(() => operatingSystemInterface),
+          processRef.overrideWith(() => quickpatchProcess),
+          quickpatchEnvRef.overrideWith(() => quickpatchEnv),
+          quickpatchFlutterRef.overrideWith(() => quickpatchFlutter),
+          quickpatchValidatorRef.overrideWith(() => quickpatchValidator),
+          quickpatchAndroidArtifactsRef.overrideWith(
+            () => quickpatchAndroidArtifacts,
+          ),
+        },
+      );
+    }
+
+    setUpAll(() {
+      registerFallbackValue(Directory(''));
+      registerFallbackValue(File(''));
+      registerFallbackValue(ReleasePlatform.android);
+    });
+
+    setUp(() {
+      argResults = MockArgResults();
+      artifactBuilder = MockArtifactBuilder();
+      artifactManager = MockArtifactManager();
+      codePushClientWrapper = MockCodePushClientWrapper();
+      codeSigner = MockCodeSigner();
+      operatingSystemInterface = MockOperatingSystemInterface();
+      progress = MockProgress();
+      projectRoot = Directory.systemTemp.createTempSync();
+      logger = MockQuickPatchLogger();
+      quickpatchProcess = MockQuickPatchProcess();
+      quickpatchEnv = MockQuickPatchEnv();
+      quickpatchFlutter = MockQuickPatchFlutter();
+      quickpatchValidator = MockQuickPatchValidator();
+      quickpatchAndroidArtifacts = MockQuickPatchAndroidArtifacts();
+
+      when(() => argResults['build-number']).thenReturn(buildNumber);
+      when(
+        () => argResults['target-platform'],
+      ).thenReturn(Arch.values.map((a) => a.targetPlatformCliArg).toList());
+      when(() => argResults.rest).thenReturn([]);
+      when(() => argResults.wasParsed(any())).thenReturn(false);
+
+      when(() => logger.progress(any())).thenReturn(progress);
+
+      when(
+        () => quickpatchEnv.getShorebirdProjectRoot(),
+      ).thenReturn(projectRoot);
+      when(() => quickpatchEnv.androidPackageName).thenReturn(packageName);
+
+      aarReleaser = AarReleaser(
+        argResults: argResults,
+        flavor: null,
+        target: null,
+      );
+    });
+
+    group('releaseType', () {
+      test('is aar', () {
+        expect(aarReleaser.releaseType, ReleaseType.aar);
+      });
+    });
+
+    group('minimumFlutterVersion', () {
+      test('is null', () {
+        // QuickPatch has always had aar support, so we don't need to
+        // specify a minimum Flutter version.
+        expect(aarReleaser.minimumFlutterVersion, isNull);
+      });
+    });
+
+    group('artifactDisplayName', () {
+      test('has expected value', () {
+        expect(aarReleaser.artifactDisplayName, 'Android archive');
+      });
+    });
+
+    group('assertPreconditions', () {
+      group('when validation succeeds', () {
+        setUp(() {
+          when(
+            () => quickpatchValidator.validatePreconditions(
+              checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
+              checkShorebirdInitialized: any(
+                named: 'checkShorebirdInitialized',
+              ),
+              validators: any(named: 'validators'),
+              supportedOperatingSystems: any(
+                named: 'supportedOperatingSystems',
+              ),
+            ),
+          ).thenAnswer((_) async {});
+        });
+
+        test('returns normally', () async {
+          await expectLater(
+            () => runWithOverrides(aarReleaser.assertPreconditions),
+            returnsNormally,
+          );
+        });
+
+        group('when androidPackageName is null', () {
+          setUp(() {
+            when(() => quickpatchEnv.androidPackageName).thenReturn(null);
+          });
+
+          test('logs error and exits with code 64', () async {
+            await expectLater(
+              () => runWithOverrides(aarReleaser.assertPreconditions),
+              exitsWithCode(ExitCode.config),
+            );
+            verify(
+              () =>
+                  logger.err('Could not find androidPackage in pubspec.yaml.'),
+            ).called(1);
+          });
+        });
+      });
+
+      group('when validation fails', () {
+        setUp(() {
+          final exception = ValidationFailedException();
+          when(
+            () => quickpatchValidator.validatePreconditions(
+              checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
+              checkShorebirdInitialized: any(
+                named: 'checkShorebirdInitialized',
+              ),
+              validators: any(named: 'validators'),
+            ),
+          ).thenThrow(exception);
+        });
+
+        test('exits with code 70', () async {
+          final exception = ValidationFailedException();
+          when(
+            () => quickpatchValidator.validatePreconditions(
+              checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
+              checkShorebirdInitialized: any(
+                named: 'checkShorebirdInitialized',
+              ),
+              validators: any(named: 'validators'),
+            ),
+          ).thenThrow(exception);
+          await expectLater(
+            () => runWithOverrides(aarReleaser.assertPreconditions),
+            exitsWithCode(exception.exitCode),
+          );
+          verify(
+            () => quickpatchValidator.validatePreconditions(
+              checkUserIsAuthenticated: true,
+              checkShorebirdInitialized: true,
+            ),
+          ).called(1);
+        });
+      });
+    });
+
+    group('assertArgsAreValid', () {
+      group('when release-version was not provided', () {
+        setUp(() {
+          when(() => argResults.wasParsed('release-version')).thenReturn(false);
+        });
+
+        test('exits with code 64', () async {
+          await expectLater(
+            () => runWithOverrides(aarReleaser.assertArgsAreValid),
+            exitsWithCode(ExitCode.usage),
+          );
+        });
+      });
+
+      group('when arguments are valid', () {
+        setUp(() {
+          when(() => argResults.wasParsed('release-version')).thenReturn(true);
+        });
+
+        test('returns normally', () {
+          expect(
+            () => runWithOverrides(aarReleaser.assertArgsAreValid),
+            returnsNormally,
+          );
+        });
+      });
+
+      group('when --obfuscate is passed', () {
+        setUp(() {
+          when(() => argResults.wasParsed('release-version')).thenReturn(true);
+          when(() => argResults['obfuscate']).thenReturn(true);
+          when(() => argResults.wasParsed('obfuscate')).thenReturn(true);
+          when(() => quickpatchEnv.flutterRevision).thenReturn('deadbeef');
+        });
+
+        group('when Flutter version supports obfuscation', () {
+          setUp(() {
+            when(
+              () => quickpatchFlutter.resolveFlutterVersion(any()),
+            ).thenAnswer((_) async => Version(3, 41, 2));
+          });
+
+          test('returns normally', () async {
+            await expectLater(
+              runWithOverrides(aarReleaser.assertArgsAreValid),
+              completes,
+            );
+          });
+        });
+
+        group('when Flutter version does not support obfuscation', () {
+          setUp(() {
+            when(
+              () => quickpatchFlutter.resolveFlutterVersion(any()),
+            ).thenAnswer((_) async => Version(3, 27, 4));
+          });
+
+          test('logs error and exits', () async {
+            await expectLater(
+              () => runWithOverrides(aarReleaser.assertArgsAreValid),
+              exitsWithCode(ExitCode.unavailable),
+            );
+          });
+        });
+      });
+
+      group('when --obfuscate is not passed', () {
+        setUp(() {
+          when(() => argResults.wasParsed('release-version')).thenReturn(true);
+        });
+
+        test('returns normally', () async {
+          await expectLater(
+            runWithOverrides(aarReleaser.assertArgsAreValid),
+            completes,
+          );
+        });
+      });
+    });
+
+    group('buildReleaseArtifacts', () {
+      void setUpProjectRootArtifacts() {
+        final aarDir = p.join(
+          projectRoot.path,
+          'build',
+          'host',
+          'outputs',
+          'repo',
+          'com',
+          'example',
+          'my_flutter_module',
+          'flutter_release',
+          buildNumber,
+        );
+        final aarPath = p.join(aarDir, 'flutter_release-$buildNumber.aar');
+        for (final archMetadata in Arch.values) {
+          final artifactPath = p.join(
+            aarDir,
+            'flutter_release-$buildNumber',
+            'jni',
+            archMetadata.androidBuildPath,
+            'libapp.so',
+          );
+          File(artifactPath).createSync(recursive: true);
+        }
+        File(aarPath).createSync(recursive: true);
+      }
+
+      setUp(() {
+        when(() => argResults['artifact']).thenReturn('apk');
+        when(
+          () => artifactBuilder.buildAar(
+            buildNumber: any(named: 'buildNumber'),
+            targetPlatforms: any(named: 'targetPlatforms'),
+            args: any(named: 'args'),
+          ),
+        ).thenAnswer((_) async => File(''));
+
+        setUpProjectRootArtifacts();
+      });
+
+      group('when build succeeds', () {
+        group('when platform was specified via arg results rest', () {
+          setUp(() {
+            when(() => argResults.rest).thenReturn(['android', '--verbose']);
+          });
+
+          test('produces aar in release directory', () async {
+            final aar = await runWithOverrides(
+              () => aarReleaser.buildReleaseArtifacts(),
+            );
+
+            expect(aar.path, p.join(projectRoot.path, 'release'));
+            verify(
+              () => artifactBuilder.buildAar(
+                buildNumber: buildNumber,
+                targetPlatforms: Arch.values.toSet(),
+                args: ['--verbose'],
+              ),
+            ).called(1);
+          });
+        });
+
+        test('produces aar in release directory', () async {
+          final aar = await runWithOverrides(
+            () => aarReleaser.buildReleaseArtifacts(),
+          );
+
+          expect(aar.path, p.join(projectRoot.path, 'release'));
+          verify(
+            () => artifactBuilder.buildAar(
+              buildNumber: buildNumber,
+              targetPlatforms: Arch.values.toSet(),
+              args: [],
+            ),
+          ).called(1);
+        });
+
+        group('when a patch signing key path is provided', () {
+          const base64PublicKey = 'base64PublicKey';
+
+          setUp(() {
+            final patchSigningPublicKeyFile = File(
+              p.join(
+                Directory.systemTemp.createTempSync().path,
+                'patch-signing-public-key.pem',
+              ),
+            )..createSync(recursive: true);
+            when(
+              () => argResults[CommonArguments.publicKeyArg.name],
+            ).thenReturn(patchSigningPublicKeyFile.path);
+            when(
+              () => argResults.wasParsed(CommonArguments.publicKeyArg.name),
+            ).thenReturn(true);
+
+            when(
+              () => artifactBuilder.buildAar(
+                buildNumber: any(named: 'buildNumber'),
+                targetPlatforms: any(named: 'targetPlatforms'),
+                args: any(named: 'args'),
+                base64PublicKey: any(named: 'base64PublicKey'),
+                ddMaxBytes: any(named: 'ddMaxBytes'),
+              ),
+            ).thenAnswer((_) async => File(''));
+
+            when(
+              () => codeSigner.base64PublicKeyFromPem(any()),
+            ).thenReturn(base64PublicKey);
+          });
+
+          test(
+            'encodes the patch signing public key and forward it to buildAar',
+            () async {
+              await runWithOverrides(() => aarReleaser.buildReleaseArtifacts());
+
+              verify(
+                () => artifactBuilder.buildAar(
+                  buildNumber: buildNumber,
+                  targetPlatforms: any(named: 'targetPlatforms'),
+                  args: any(named: 'args'),
+                  base64PublicKey: base64PublicKey,
+                ),
+              ).called(1);
+            },
+          );
+        });
+
+        group('when a public-key-cmd is provided', () {
+          const base64PublicKey = 'base64PublicKeyFromCmd';
+
+          setUp(() {
+            when(
+              () => argResults[CommonArguments.publicKeyCmd.name],
+            ).thenReturn('get-key-cmd');
+            when(
+              () => argResults.wasParsed(CommonArguments.publicKeyCmd.name),
+            ).thenReturn(true);
+
+            when(
+              () => artifactBuilder.buildAar(
+                buildNumber: any(named: 'buildNumber'),
+                targetPlatforms: any(named: 'targetPlatforms'),
+                args: any(named: 'args'),
+                base64PublicKey: any(named: 'base64PublicKey'),
+                ddMaxBytes: any(named: 'ddMaxBytes'),
+              ),
+            ).thenAnswer((_) async => File(''));
+
+            when(
+              () => codeSigner.runPublicKeyCmd(any()),
+            ).thenAnswer((_) async => 'pem-public-key');
+            when(
+              () => codeSigner.base64PublicKeyFromPem(any()),
+            ).thenReturn(base64PublicKey);
+          });
+
+          test(
+            'runs public key cmd and forwards encoded key to buildAar',
+            () async {
+              await runWithOverrides(() => aarReleaser.buildReleaseArtifacts());
+
+              verify(
+                () => codeSigner.runPublicKeyCmd('get-key-cmd'),
+              ).called(1);
+              verify(
+                () => codeSigner.base64PublicKeyFromPem('pem-public-key'),
+              ).called(1);
+              verify(
+                () => artifactBuilder.buildAar(
+                  buildNumber: buildNumber,
+                  targetPlatforms: any(named: 'targetPlatforms'),
+                  args: any(named: 'args'),
+                  base64PublicKey: base64PublicKey,
+                ),
+              ).called(1);
+            },
+          );
+        });
+
+        group('when --obfuscate is passed', () {
+          setUp(() {
+            when(() => argResults['obfuscate']).thenReturn(true);
+            when(() => argResults.wasParsed('obfuscate')).thenReturn(true);
+            when(() => quickpatchEnv.flutterRevision).thenReturn('deadbeef');
+            when(
+              () => quickpatchFlutter.resolveFlutterVersion(any()),
+            ).thenAnswer((_) async => Version(3, 41, 2));
+            // AAR is an Android pipeline target; addObfuscationMapArgs
+            // consults this helper to decide whether to pass --strip.
+            // On pre-3.44 Flutter we still pre-strip in gen_snapshot.
+            when(
+              () => quickpatchFlutter.shouldPreStripLibappInGenSnapshot(
+                platform: any(named: 'platform'),
+                flutterRevision: any(named: 'flutterRevision'),
+              ),
+            ).thenAnswer((_) async => true);
+            // Simulate the build creating the obfuscation map.
+            when(
+              () => artifactBuilder.buildAar(
+                buildNumber: any(named: 'buildNumber'),
+                targetPlatforms: any(named: 'targetPlatforms'),
+                args: any(named: 'args'),
+              ),
+            ).thenAnswer((_) async {
+              final mapPath = p.join(
+                projectRoot.path,
+                'build',
+                'quickpatch',
+                'obfuscation_map.json',
+              );
+              File(mapPath)
+                ..createSync(recursive: true)
+                ..writeAsStringSync('{}');
+            });
+          });
+
+          test('injects --save-obfuscation-map into build args', () async {
+            await runWithOverrides(aarReleaser.buildReleaseArtifacts);
+
+            final captured = verify(
+              () => artifactBuilder.buildAar(
+                buildNumber: any(named: 'buildNumber'),
+                targetPlatforms: any(named: 'targetPlatforms'),
+                args: captureAny(named: 'args'),
+              ),
+            ).captured;
+
+            final args = captured.last as List<String>;
+            expect(
+              args.any(
+                (a) => a.startsWith(
+                  '--extra-gen-snapshot-options=--save-obfuscation-map=',
+                ),
+              ),
+              isTrue,
+            );
+          });
+
+          test('logs detail about map location', () async {
+            await runWithOverrides(aarReleaser.buildReleaseArtifacts);
+
+            verify(
+              () => logger.detail(
+                any(that: startsWith('Obfuscation map saved to')),
+              ),
+            ).called(1);
+          });
+
+          group('when obfuscation map is not generated', () {
+            setUp(() {
+              // Override to NOT create the map file.
+              when(
+                () => artifactBuilder.buildAar(
+                  buildNumber: any(named: 'buildNumber'),
+                  targetPlatforms: any(named: 'targetPlatforms'),
+                  args: any(named: 'args'),
+                ),
+              ).thenAnswer((_) async {});
+            });
+
+            test('logs error and exits', () async {
+              await expectLater(
+                () => runWithOverrides(aarReleaser.buildReleaseArtifacts),
+                exitsWithCode(ExitCode.software),
+              );
+
+              verify(
+                () => logger.err(
+                  any(
+                    that: contains(
+                      'Obfuscation was enabled but the obfuscation map was not',
+                    ),
+                  ),
+                ),
+              ).called(1);
+            });
+          });
+        });
+      });
+    });
+
+    group('assembleSupplementDirectory', () {
+      late Directory supplementDir;
+
+      setUp(() {
+        // Create the supplement directory as it would exist on disk.
+        supplementDir = Directory(
+          p.join(projectRoot.path, 'build', 'android', 'quickpatch'),
+        )..createSync(recursive: true);
+
+        // Stub getReleaseSupplementDirectory to use the real directory.
+        when(
+          () => artifactManager.getReleaseSupplementDirectory(
+            platformSubdir: any(named: 'platformSubdir'),
+            create: any(named: 'create'),
+          ),
+        ).thenAnswer((invocation) {
+          final create =
+              invocation.namedArguments[const Symbol('create')] as bool;
+          if (!supplementDir.existsSync() && create) {
+            supplementDir.createSync(recursive: true);
+          }
+          return supplementDir.existsSync() ? supplementDir : null;
+        });
+      });
+
+      group('when obfuscation is enabled and map exists', () {
+        setUp(() {
+          when(() => argResults['obfuscate']).thenReturn(true);
+          when(() => argResults.wasParsed('obfuscate')).thenReturn(true);
+
+          // Create the obfuscation map at the expected build output location.
+          final mapFile = File(
+            p.join(
+              projectRoot.path,
+              'build',
+              'quickpatch',
+              'obfuscation_map.json',
+            ),
+          )..createSync(recursive: true);
+          mapFile.writeAsStringSync('{"key": "value"}');
+        });
+
+        test('copies map into supplement directory and returns it', () {
+          final result = runWithOverrides(
+            () => aarReleaser.assembleSupplementDirectory(),
+          );
+
+          expect(result, isNotNull);
+          final mapInSupplement = File(
+            p.join(supplementDir.path, 'obfuscation_map.json'),
+          );
+          expect(mapInSupplement.existsSync(), isTrue);
+          expect(mapInSupplement.readAsStringSync(), '{"key": "value"}');
+        });
+      });
+
+      group('when obfuscation is disabled', () {
+        setUp(() {
+          when(() => argResults['obfuscate']).thenReturn(false);
+        });
+
+        group('and no stale map exists', () {
+          test('returns null', () {
+            // Remove the supplement dir so it's empty/missing.
+            if (supplementDir.existsSync()) {
+              supplementDir.deleteSync(recursive: true);
+            }
+            when(
+              () => artifactManager.getReleaseSupplementDirectory(
+                platformSubdir: any(named: 'platformSubdir'),
+                create: any(named: 'create'),
+              ),
+            ).thenReturn(null);
+
+            final result = runWithOverrides(
+              () => aarReleaser.assembleSupplementDirectory(),
+            );
+
+            expect(result, isNull);
+          });
+        });
+
+        group('and a stale obfuscation map exists', () {
+          setUp(() {
+            // Simulate a leftover obfuscation_map.json from a previous
+            // obfuscated build.
+            File(
+                p.join(supplementDir.path, 'obfuscation_map.json'),
+              )
+              ..createSync(recursive: true)
+              ..writeAsStringSync('{"stale": true}');
+          });
+
+          test('removes stale map, logs detail, and returns null', () {
+            final result = runWithOverrides(
+              () => aarReleaser.assembleSupplementDirectory(),
+            );
+
+            expect(result, isNull);
+            expect(
+              File(
+                p.join(supplementDir.path, 'obfuscation_map.json'),
+              ).existsSync(),
+              isFalse,
+            );
+            verify(
+              () => logger.detail(
+                any(that: contains('Removing stale obfuscation map')),
+              ),
+            ).called(1);
+          });
+        });
+      });
+    });
+
+    group('getReleaseVersion', () {
+      const releaseVersion = '1.0.0';
+      setUp(() {
+        when(() => argResults['release-version']).thenReturn(releaseVersion);
+      });
+
+      test('returns value from argResults', () async {
+        final result = await runWithOverrides(
+          () =>
+              aarReleaser.getReleaseVersion(releaseArtifactRoot: Directory('')),
+        );
+        expect(result, releaseVersion);
+      });
+    });
+
+    group('uploadReleaseArtifacts', () {
+      const releaseVersion = '1.0.0';
+      const appId = 'appId';
+      const flutterRevision = 'deadbeef';
+      const flutterVersion = '3.22.0';
+
+      final release = Release(
+        id: 42,
+        appId: appId,
+        version: releaseVersion,
+        flutterRevision: flutterRevision,
+        flutterVersion: flutterVersion,
+        displayName: '1.2.3+1',
+        platformStatuses: const {},
+        createdAt: DateTime(2023),
+        updatedAt: DateTime(2023),
+      );
+
+      setUp(() {
+        when(
+          () => quickpatchAndroidArtifacts.extractAar(
+            packageName: any(named: 'packageName'),
+            buildNumber: any(named: 'buildNumber'),
+            unzipFn: any(named: 'unzipFn'),
+          ),
+        ).thenAnswer((_) async => Directory('path'));
+        when(
+          () => codePushClientWrapper.createAndroidArchiveReleaseArtifacts(
+            appId: any(named: 'appId'),
+            releaseId: any(named: 'releaseId'),
+            platform: any(named: 'platform'),
+            aarPath: any(named: 'aarPath'),
+            extractedAarDir: any(named: 'extractedAarDir'),
+            architectures: any(named: 'architectures'),
+          ),
+        ).thenAnswer((_) async {});
+      });
+
+      test('uploads artifacts', () async {
+        await runWithOverrides(
+          () => aarReleaser.uploadReleaseArtifacts(
+            release: release,
+            appId: appId,
+          ),
+        );
+
+        verify(
+          () => codePushClientWrapper.createAndroidArchiveReleaseArtifacts(
+            appId: appId,
+            releaseId: release.id,
+            platform: ReleasePlatform.android,
+            aarPath: any(
+              named: 'aarPath',
+              that: endsWith(
+                p.join(
+                  'build',
+                  'host',
+                  'outputs',
+                  'repo',
+                  'com',
+                  'example',
+                  'my_flutter_module',
+                  'flutter_release',
+                  '1.0',
+                  'flutter_release-1.0.aar',
+                ),
+              ),
+            ),
+            extractedAarDir: 'path',
+            architectures: Arch.values,
+          ),
+        ).called(1);
+      });
+    });
+
+    group('updatedReleaseMetadata', () {
+      test('returns expected metadata', () async {
+        final metadata = UpdateReleaseMetadata.forTest();
+        expect(
+          aarReleaser.updatedReleaseMetadata(metadata),
+          completion(metadata),
+        );
+      });
+    });
+
+    group('postReleaseInstructions', () {
+      test('returns expected instructions', () {
+        expect(
+          runWithOverrides(() => aarReleaser.postReleaseInstructions),
+          equals('''
+
+Your next steps:
+
+1. Add the aar repo and QuickPatch's maven url to your app's settings.gradle:
+
+Note: The maven url needs to be a relative path from your settings.gradle file to the aar library. The code below assumes your Flutter module is in a sibling directory of your Android app.
+
+${lightCyan.wrap('''
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
++       maven {
++           url '../${p.basename(quickpatchEnv.getShorebirdProjectRoot()!.path)}/${p.relative(p.join(projectRoot.path, 'release'))}'
++       }
++       maven {
+-           url 'https://storage.googleapis.com/download.flutter.io'
++           url 'https://download.quickpatch.dev/download.flutter.io'
++       }
+    }
+}
+''')}
+
+2. Add this module as a dependency in your app's build.gradle:
+${lightCyan.wrap('''
+dependencies {
+  // ...
+  releaseImplementation '${quickpatchEnv.androidPackageName}:flutter_release:$buildNumber'
+  // ...
+}''')}
+'''),
+        );
+      });
+    });
+  });
+}

@@ -1,0 +1,708 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:args/args.dart';
+import 'package:http/http.dart' as http;
+import 'package:mason_logger/mason_logger.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:scoped_deps/scoped_deps.dart';
+import 'package:quickpatch_cli/src/android_sdk.dart';
+import 'package:quickpatch_cli/src/android_studio.dart';
+import 'package:quickpatch_cli/src/commands/commands.dart';
+import 'package:quickpatch_cli/src/doctor.dart';
+import 'package:quickpatch_cli/src/executables/executables.dart';
+import 'package:quickpatch_cli/src/http_client/http_client.dart';
+import 'package:quickpatch_cli/src/json_output.dart';
+import 'package:quickpatch_cli/src/logging/logging.dart';
+import 'package:quickpatch_cli/src/network_checker.dart';
+import 'package:quickpatch_cli/src/quickpatch_env.dart';
+import 'package:quickpatch_cli/src/quickpatch_flutter.dart';
+import 'package:quickpatch_cli/src/validators/validators.dart';
+import 'package:quickpatch_cli/src/version.dart';
+import 'package:test/test.dart';
+
+import '../helpers.dart';
+import '../mocks.dart';
+
+void main() {
+  group('doctor', () {
+    const quickpatchEngineRevision = 'test-engine-revision';
+    const quickpatchFlutterRevision = 'test-flutter-revision';
+
+    late ArgResults argResults;
+    late AndroidStudio androidStudio;
+    late AndroidSdk androidSdk;
+    late Directory logsDirectory;
+    late Doctor doctor;
+    late Gradlew gradlew;
+    late Java java;
+    late NetworkChecker networkChecker;
+    late Progress progress;
+    late QuickPatchLogger logger;
+    late QuickPatchEnv quickpatchEnv;
+    late QuickPatchFlutter quickpatchFlutter;
+    late Validator validator;
+    late DoctorCommand command;
+
+    R runWithOverrides<R>(R Function() body) {
+      return runScoped(
+        body,
+        values: {
+          androidStudioRef.overrideWith(() => androidStudio),
+          androidSdkRef.overrideWith(() => androidSdk),
+          doctorRef.overrideWith(() => doctor),
+          gradlewRef.overrideWith(() => gradlew),
+          isJsonModeRef.overrideWith(() => false),
+          javaRef.overrideWith(() => java),
+          loggerRef.overrideWith(() => logger),
+          networkCheckerRef.overrideWith(() => networkChecker),
+          quickpatchEnvRef.overrideWith(() => quickpatchEnv),
+          quickpatchFlutterRef.overrideWith(() => quickpatchFlutter),
+        },
+      );
+    }
+
+    setUp(() {
+      argResults = MockArgResults();
+      androidStudio = MockAndroidStudio();
+      androidSdk = MockAndroidSdk();
+      doctor = MockDoctor();
+      gradlew = MockGradlew();
+      logsDirectory = Directory.systemTemp.createTempSync('quickpatch_logs');
+      java = MockJava();
+      logger = MockQuickPatchLogger();
+      networkChecker = MockNetworkChecker();
+      progress = MockProgress();
+      quickpatchEnv = MockQuickPatchEnv();
+      quickpatchFlutter = MockQuickPatchFlutter();
+      validator = MockValidator();
+
+      when(() => argResults['verbose']).thenReturn(false);
+      when(() => argResults['fix']).thenReturn(false);
+      when(() => androidStudio.path).thenReturn(null);
+      when(() => androidSdk.path).thenReturn(null);
+      when(() => androidSdk.adbPath).thenReturn(null);
+      when(() => gradlew.exists(any())).thenReturn(false);
+      when(() => java.home).thenReturn(null);
+      when(() => logger.progress(any())).thenReturn(progress);
+      when(
+        () => networkChecker.checkReachability(),
+      ).thenAnswer((_) async => {});
+      when(
+        () => networkChecker.performGCPDownloadSpeedTest(),
+      ).thenAnswer((_) async => 1.0);
+      when(
+        () => networkChecker.performGCPUploadSpeedTest(),
+      ).thenAnswer((_) async => 1.0);
+      when(
+        () => quickpatchEnv.quickpatchEngineRevision,
+      ).thenReturn(quickpatchEngineRevision);
+      when(
+        () => quickpatchEnv.flutterRevision,
+      ).thenReturn(quickpatchFlutterRevision);
+      when(() => quickpatchEnv.logsDirectory).thenReturn(logsDirectory);
+      when(() => doctor.initAndDoctorValidators).thenReturn([validator]);
+      when(
+        () => doctor.runValidators(any(), applyFixes: any(named: 'applyFixes')),
+      ).thenAnswer((_) async => {});
+      when(quickpatchFlutter.getVersionString).thenAnswer((_) async => null);
+
+      command = runWithOverrides(DoctorCommand.new)
+        ..testArgResults = argResults;
+    });
+
+    test('prints quickpatch version, flutter revision, '
+        'and engine revision '
+        'when unable to determine Flutter version', () async {
+      when(
+        () => quickpatchFlutter.getVersionString(),
+      ).thenThrow(Exception('oops'));
+      await runWithOverrides(command.run);
+
+      verify(
+        () => logger.info('''
+
+QuickPatch v$packageVersion • git@github.com:letssuhail/quickpatch.git
+Flutter • revision ${quickpatchEnv.flutterRevision}
+Engine • revision $quickpatchEngineRevision
+'''),
+      ).called(1);
+      verify(
+        () => logger.detail(
+          'Unable to determine Flutter version.\nException: oops',
+        ),
+      ).called(1);
+    });
+
+    test(
+      '''prints quickpatch version, flutter revision, flutter version, and engine revision''',
+      () async {
+        const flutterVersion = '1.2.3';
+        when(
+          () => quickpatchFlutter.getVersionString(),
+        ).thenAnswer((_) async => flutterVersion);
+        await runWithOverrides(command.run);
+
+        verify(
+          () => logger.info('''
+
+QuickPatch v$packageVersion • git@github.com:letssuhail/quickpatch.git
+Flutter $flutterVersion • revision ${quickpatchEnv.flutterRevision}
+Engine • revision $quickpatchEngineRevision
+'''),
+        ).called(1);
+        verify(() => networkChecker.checkReachability()).called(1);
+        verifyNever(() => networkChecker.performGCPDownloadSpeedTest());
+        verifyNever(() => networkChecker.performGCPUploadSpeedTest());
+      },
+    );
+
+    group('--verbose', () {
+      setUp(() {
+        when(() => argResults['verbose']).thenReturn(true);
+        when(
+          () => networkChecker.performGCPDownloadSpeedTest(),
+        ).thenAnswer((_) async => 1.987654321);
+        when(
+          () => networkChecker.performGCPUploadSpeedTest(),
+        ).thenAnswer((_) async => 1.23456789);
+      });
+
+      test('prints additional information (not detected)', () async {
+        await runWithOverrides(command.run);
+
+        final notDetectedText = red.wrap('not detected');
+        final msg =
+            verify(() => logger.info(captureAny())).captured.first as String;
+
+        expect(
+          msg,
+          equals('''
+QuickPatch $packageVersion • git@github.com:letssuhail/quickpatch.git
+Flutter • revision ${quickpatchEnv.flutterRevision}
+Engine • revision $quickpatchEngineRevision
+
+Logs: ${logsDirectory.path}
+Android Toolchain
+  • Android Studio: $notDetectedText
+  • Android SDK: $notDetectedText
+  • ADB: $notDetectedText
+  • JAVA_HOME: $notDetectedText
+  • JAVA_EXECUTABLE: $notDetectedText
+  • JAVA_VERSION: $notDetectedText
+  • Gradle: $notDetectedText
+'''),
+        );
+      });
+
+      test('prints additional information (detected)', () async {
+        when(() => androidStudio.path).thenReturn('test-studio-path');
+        when(() => androidSdk.path).thenReturn('test-sdk-path');
+        when(() => androidSdk.adbPath).thenReturn('test-adb-path');
+        when(() => java.home).thenReturn('test-java-home');
+        when(() => java.executable).thenReturn('test-java-executable');
+
+        when(() => java.version).thenReturn(
+          '''
+openjdk version "17.0.9" 2023-10-17
+OpenJDK Runtime Environment (build 17.0.9+0-17.0.9b1087.7-11185874)
+OpenJDK 64-Bit Server VM (build 17.0.9+0-17.0.9b1087.7-11185874, mixed mode)'''
+              .replaceAll('\n', Platform.lineTerminator),
+        );
+        await runWithOverrides(command.run);
+
+        final msg =
+            verify(() => logger.info(captureAny())).captured.first as String;
+
+        final notDetectedText = red.wrap('not detected');
+        expect(
+          msg.replaceAll(Platform.lineTerminator, '\n'),
+          equals('''
+QuickPatch $packageVersion • git@github.com:letssuhail/quickpatch.git
+Flutter • revision ${quickpatchEnv.flutterRevision}
+Engine • revision $quickpatchEngineRevision
+
+Logs: ${logsDirectory.path}
+Android Toolchain
+  • Android Studio: test-studio-path
+  • Android SDK: test-sdk-path
+  • ADB: test-adb-path
+  • JAVA_HOME: test-java-home
+  • JAVA_EXECUTABLE: test-java-executable
+  • JAVA_VERSION: openjdk version "17.0.9" 2023-10-17
+                  OpenJDK Runtime Environment (build 17.0.9+0-17.0.9b1087.7-11185874)
+                  OpenJDK 64-Bit Server VM (build 17.0.9+0-17.0.9b1087.7-11185874, mixed mode)
+  • Gradle: $notDetectedText
+'''),
+        );
+
+        verify(() => networkChecker.checkReachability()).called(1);
+        verify(() => networkChecker.performGCPDownloadSpeedTest()).called(1);
+        verify(
+          () => progress.complete('GCP Download Speed: 1.99 MB/s'),
+        ).called(1);
+        verify(() => networkChecker.performGCPUploadSpeedTest()).called(1);
+        verify(
+          () => progress.complete('GCP Upload Speed: 1.23 MB/s'),
+        ).called(1);
+      });
+
+      group('when a gradlew executable exists', () {
+        setUp(() {
+          when(() => gradlew.exists(any())).thenReturn(true);
+          when(() => gradlew.version(any())).thenAnswer((_) async => '7.6.3');
+          when(() => androidStudio.path).thenReturn('test-studio-path');
+          when(() => androidSdk.path).thenReturn('test-sdk-path');
+          when(() => androidSdk.adbPath).thenReturn('test-adb-path');
+          when(() => java.home).thenReturn('test-java-home');
+          when(() => java.executable).thenReturn('test-java-executable');
+
+          when(() => java.version).thenReturn(
+            '''
+openjdk version "17.0.9" 2023-10-17
+OpenJDK Runtime Environment (build 17.0.9+0-17.0.9b1087.7-11185874)
+OpenJDK 64-Bit Server VM (build 17.0.9+0-17.0.9b1087.7-11185874, mixed mode)'''
+                .replaceAll('\n', Platform.lineTerminator),
+          );
+        });
+
+        test('prints the gradle version', () async {
+          await runWithOverrides(command.run);
+
+          final msg =
+              verify(() => logger.info(captureAny())).captured.first as String;
+
+          expect(
+            msg.replaceAll(Platform.lineTerminator, '\n'),
+            equals('''
+QuickPatch $packageVersion • git@github.com:letssuhail/quickpatch.git
+Flutter • revision ${quickpatchEnv.flutterRevision}
+Engine • revision $quickpatchEngineRevision
+
+Logs: ${logsDirectory.path}
+Android Toolchain
+  • Android Studio: test-studio-path
+  • Android SDK: test-sdk-path
+  • ADB: test-adb-path
+  • JAVA_HOME: test-java-home
+  • JAVA_EXECUTABLE: test-java-executable
+  • JAVA_VERSION: openjdk version "17.0.9" 2023-10-17
+                  OpenJDK Runtime Environment (build 17.0.9+0-17.0.9b1087.7-11185874)
+                  OpenJDK 64-Bit Server VM (build 17.0.9+0-17.0.9b1087.7-11185874, mixed mode)
+  • Gradle: 7.6.3
+'''),
+          );
+        });
+      });
+
+      group('when gcp upload speed test fails', () {
+        setUp(() {
+          const flutterVersion = '1.2.3';
+          when(
+            () => quickpatchFlutter.getVersionString(),
+          ).thenAnswer((_) async => flutterVersion);
+        });
+
+        group('with NetworkCheckerException', () {
+          setUp(() {
+            when(
+              () => networkChecker.performGCPUploadSpeedTest(),
+            ).thenThrow(const NetworkCheckerException('oops'));
+          });
+
+          test('logs error as detail, continues', () async {
+            await expectLater(runWithOverrides(command.run), completes);
+
+            verify(
+              () => progress.fail('GCP upload speed test failed: oops'),
+            ).called(1);
+          });
+        });
+
+        group('with generic Exception', () {
+          setUp(() {
+            when(
+              () => networkChecker.performGCPUploadSpeedTest(),
+            ).thenThrow(Exception('oops'));
+          });
+
+          test('logs error as detail, continues', () async {
+            await expectLater(runWithOverrides(command.run), completes);
+
+            verify(
+              () => progress.fail(
+                'GCP upload speed test failed: Exception: oops',
+              ),
+            ).called(1);
+          });
+        });
+      });
+
+      group('when gcp download speed test fails', () {
+        setUp(() {
+          const flutterVersion = '1.2.3';
+          when(
+            () => quickpatchFlutter.getVersionString(),
+          ).thenAnswer((_) async => flutterVersion);
+        });
+
+        group('with NetworkCheckerException', () {
+          setUp(() {
+            when(
+              () => networkChecker.performGCPDownloadSpeedTest(),
+            ).thenThrow(const NetworkCheckerException('oops'));
+          });
+
+          test('logs error as detail, continues', () async {
+            await expectLater(runWithOverrides(command.run), completes);
+
+            verify(
+              () => progress.fail('GCP download speed test failed: oops'),
+            ).called(1);
+          });
+        });
+
+        group('with generic Exception', () {
+          setUp(() {
+            when(
+              () => networkChecker.performGCPDownloadSpeedTest(),
+            ).thenThrow(Exception('oops'));
+          });
+
+          test('logs error as detail, continues', () async {
+            await expectLater(runWithOverrides(command.run), completes);
+
+            verify(
+              () => progress.fail(
+                'GCP download speed test failed: Exception: oops',
+              ),
+            ).called(1);
+          });
+        });
+      });
+    });
+
+    test(
+      'runs validators without applying fixes if no fix flag exists',
+      () async {
+        when(() => argResults['fix']).thenReturn(null);
+        final result = await runWithOverrides(command.run);
+
+        expect(result, equals(ExitCode.success.code));
+        verify(() => doctor.runValidators([validator])).called(1);
+      },
+    );
+
+    test('runs validators and applies fixes fix flag is true', () async {
+      when(() => argResults['fix']).thenReturn(true);
+      final result = await runWithOverrides(command.run);
+
+      expect(result, equals(ExitCode.success.code));
+      verify(
+        () => doctor.runValidators([validator], applyFixes: true),
+      ).called(1);
+    });
+
+    group('when --json is passed', () {
+      late http.Client mockHttpClient;
+      late List<String> stdoutOutput;
+
+      setUpAll(() {
+        registerFallbackValue(Uri());
+      });
+
+      R runJsonWithOverrides<R>(R Function() body) {
+        return runScoped(
+          body,
+          values: {
+            androidStudioRef.overrideWith(() => androidStudio),
+            androidSdkRef.overrideWith(() => androidSdk),
+            doctorRef.overrideWith(() => doctor),
+            gradlewRef.overrideWith(() => gradlew),
+            httpClientRef.overrideWith(() => mockHttpClient),
+            isJsonModeRef.overrideWith(() => true),
+            javaRef.overrideWith(() => java),
+            loggerRef.overrideWith(() => logger),
+            networkCheckerRef.overrideWith(() => networkChecker),
+            quickpatchEnvRef.overrideWith(() => quickpatchEnv),
+            quickpatchFlutterRef.overrideWith(() => quickpatchFlutter),
+          },
+        );
+      }
+
+      setUp(() {
+        stdoutOutput = [];
+        mockHttpClient = MockHttpClient();
+
+        when(() => mockHttpClient.get(any())).thenAnswer(
+          (_) async => http.Response('', 200),
+        );
+        when(() => java.executable).thenReturn(null);
+        when(() => validator.canRunInCurrentContext()).thenReturn(true);
+        when(() => validator.description).thenReturn('Test Validator');
+        when(() => validator.validate()).thenAnswer((_) async => []);
+
+        command = runJsonWithOverrides(DoctorCommand.new)
+          ..testArgResults = argResults;
+      });
+
+      test('emits JSON success with version info and diagnostics', () async {
+        const flutterVersion = '3.22.2';
+        when(
+          () => quickpatchFlutter.getVersionString(),
+        ).thenAnswer((_) async => flutterVersion);
+
+        final exitCode = await captureStdout(
+          () => runJsonWithOverrides(command.run),
+          captured: stdoutOutput,
+        );
+
+        expect(exitCode, equals(ExitCode.success.code));
+        expect(stdoutOutput, isNotEmpty);
+        final json = jsonDecode(stdoutOutput.first) as Map<String, dynamic>;
+        expect(json['status'], equals('success'));
+
+        final data = json['data'] as Map<String, dynamic>;
+        expect(data['quickpatch_version'], equals(packageVersion));
+        expect(data['flutter_version'], equals(flutterVersion));
+        expect(data['flutter_revision'], equals(quickpatchFlutterRevision));
+        expect(data['engine_revision'], equals(quickpatchEngineRevision));
+
+        final toolchain = data['android_toolchain'] as Map<String, dynamic>;
+        expect(toolchain, containsPair('android_studio', isNull));
+        expect(toolchain, containsPair('android_sdk', isNull));
+
+        final network = data['network'] as List<dynamic>;
+        expect(network, isNotEmpty);
+
+        final validators = data['validators'] as List<dynamic>;
+        expect(validators, hasLength(1));
+        final v = validators.first as Map<String, dynamic>;
+        expect(v['name'], equals('Test Validator'));
+        expect(v['ok'], isTrue);
+        expect(v['issues'], isEmpty);
+      });
+
+      test('emits null flutter_version when lookup fails', () async {
+        when(
+          () => quickpatchFlutter.getVersionString(),
+        ).thenThrow(Exception('oops'));
+
+        final exitCode = await captureStdout(
+          () => runJsonWithOverrides(command.run),
+          captured: stdoutOutput,
+        );
+
+        expect(exitCode, equals(ExitCode.success.code));
+        final json = jsonDecode(stdoutOutput.first) as Map<String, dynamic>;
+        final data = json['data'] as Map<String, dynamic>;
+        expect(data['flutter_version'], isNull);
+      });
+
+      test('includes android toolchain info', () async {
+        when(
+          () => quickpatchFlutter.getVersionString(),
+        ).thenAnswer((_) async => '3.22.2');
+        when(() => androidStudio.path).thenReturn('/path/to/studio');
+        when(() => androidSdk.path).thenReturn('/path/to/sdk');
+        when(() => androidSdk.adbPath).thenReturn('/path/to/adb');
+        when(() => java.home).thenReturn('/path/to/java');
+        when(() => java.executable).thenReturn('/path/to/java/bin/java');
+        when(() => java.version).thenReturn('17.0.9');
+        when(() => gradlew.exists(any())).thenReturn(true);
+        when(() => gradlew.version(any())).thenAnswer((_) async => '8.0');
+
+        await captureStdout(
+          () => runJsonWithOverrides(command.run),
+          captured: stdoutOutput,
+        );
+
+        final json = jsonDecode(stdoutOutput.first) as Map<String, dynamic>;
+        final data = json['data'] as Map<String, dynamic>;
+        final toolchain = data['android_toolchain'] as Map<String, dynamic>;
+        expect(toolchain['android_studio'], equals('/path/to/studio'));
+        expect(toolchain['android_sdk'], equals('/path/to/sdk'));
+        expect(toolchain['adb'], equals('/path/to/adb'));
+        expect(toolchain['java_home'], equals('/path/to/java'));
+        expect(toolchain['java_version'], equals('17.0.9'));
+        expect(toolchain['gradle_version'], equals('8.0'));
+      });
+
+      test('reports network reachability per URL', () async {
+        when(
+          () => quickpatchFlutter.getVersionString(),
+        ).thenAnswer((_) async => '3.22.2');
+
+        // First URL succeeds, second fails.
+        var callCount = 0;
+        when(() => mockHttpClient.get(any())).thenAnswer((_) async {
+          callCount++;
+          if (callCount == 2) throw Exception('unreachable');
+          return http.Response('', 200);
+        });
+
+        await captureStdout(
+          () => runJsonWithOverrides(command.run),
+          captured: stdoutOutput,
+        );
+
+        final json = jsonDecode(stdoutOutput.first) as Map<String, dynamic>;
+        final data = json['data'] as Map<String, dynamic>;
+        final network = (data['network'] as List<dynamic>)
+            .cast<Map<String, dynamic>>();
+        expect(network[0]['reachable'], isTrue);
+        expect(network[1]['reachable'], isFalse);
+      });
+
+      test('includes validator issues with severity', () async {
+        when(
+          () => quickpatchFlutter.getVersionString(),
+        ).thenAnswer((_) async => '3.22.2');
+        when(() => validator.validate()).thenAnswer(
+          (_) async => [
+            ValidationIssue.error(message: 'Missing permission'),
+            ValidationIssue.warning(message: 'Consider upgrading'),
+          ],
+        );
+
+        await captureStdout(
+          () => runJsonWithOverrides(command.run),
+          captured: stdoutOutput,
+        );
+
+        final json = jsonDecode(stdoutOutput.first) as Map<String, dynamic>;
+        final data = json['data'] as Map<String, dynamic>;
+        final validators = (data['validators'] as List<dynamic>)
+            .cast<Map<String, dynamic>>();
+        expect(validators.first['ok'], isFalse);
+        final issues = (validators.first['issues'] as List<dynamic>)
+            .cast<Map<String, dynamic>>();
+        expect(issues[0]['severity'], equals('error'));
+        expect(issues[0]['message'], equals('Missing permission'));
+        expect(issues[1]['severity'], equals('warning'));
+        expect(issues[1]['message'], equals('Consider upgrading'));
+      });
+
+      test('skips validators that cannot run in current context', () async {
+        when(
+          () => quickpatchFlutter.getVersionString(),
+        ).thenAnswer((_) async => '3.22.2');
+        when(() => validator.canRunInCurrentContext()).thenReturn(false);
+
+        await captureStdout(
+          () => runJsonWithOverrides(command.run),
+          captured: stdoutOutput,
+        );
+
+        final json = jsonDecode(stdoutOutput.first) as Map<String, dynamic>;
+        final data = json['data'] as Map<String, dynamic>;
+        final validators = data['validators'] as List<dynamic>;
+        expect(validators, isEmpty);
+      });
+
+      test(
+        'does not call logger-based networkChecker or doctor.runValidators',
+        () async {
+          when(
+            () => quickpatchFlutter.getVersionString(),
+          ).thenAnswer((_) async => '3.22.2');
+
+          await captureStdout(
+            () => runJsonWithOverrides(command.run),
+            captured: stdoutOutput,
+          );
+
+          verifyNever(() => networkChecker.checkReachability());
+          verifyNever(
+            () => doctor.runValidators(
+              any(),
+              applyFixes: any(named: 'applyFixes'),
+            ),
+          );
+          verifyNever(() => logger.info(any()));
+        },
+      );
+
+      test('includes speed_test when --verbose is passed', () async {
+        when(() => argResults['verbose']).thenReturn(true);
+        when(
+          () => quickpatchFlutter.getVersionString(),
+        ).thenAnswer((_) async => '3.22.2');
+        when(
+          () => networkChecker.performGCPUploadSpeedTest(),
+        ).thenAnswer((_) async => 1.23);
+        when(
+          () => networkChecker.performGCPDownloadSpeedTest(),
+        ).thenAnswer((_) async => 4.56);
+
+        await captureStdout(
+          () => runJsonWithOverrides(command.run),
+          captured: stdoutOutput,
+        );
+
+        final json = jsonDecode(stdoutOutput.first) as Map<String, dynamic>;
+        final data = json['data'] as Map<String, dynamic>;
+        final speedTest = data['speed_test'] as Map<String, dynamic>;
+        expect(speedTest['upload_megabytes_per_sec'], equals(1.23));
+        expect(speedTest['download_megabytes_per_sec'], equals(4.56));
+      });
+
+      test('omits speed_test when --verbose is not passed', () async {
+        when(
+          () => quickpatchFlutter.getVersionString(),
+        ).thenAnswer((_) async => '3.22.2');
+
+        await captureStdout(
+          () => runJsonWithOverrides(command.run),
+          captured: stdoutOutput,
+        );
+
+        final json = jsonDecode(stdoutOutput.first) as Map<String, dynamic>;
+        final data = json['data'] as Map<String, dynamic>;
+        expect(data.containsKey('speed_test'), isFalse);
+      });
+
+      test('reports null speed_test values when tests fail', () async {
+        when(() => argResults['verbose']).thenReturn(true);
+        when(
+          () => quickpatchFlutter.getVersionString(),
+        ).thenAnswer((_) async => '3.22.2');
+        when(
+          () => networkChecker.performGCPUploadSpeedTest(),
+        ).thenThrow(Exception('upload failed'));
+        when(
+          () => networkChecker.performGCPDownloadSpeedTest(),
+        ).thenThrow(Exception('download failed'));
+
+        await captureStdout(
+          () => runJsonWithOverrides(command.run),
+          captured: stdoutOutput,
+        );
+
+        final json = jsonDecode(stdoutOutput.first) as Map<String, dynamic>;
+        final data = json['data'] as Map<String, dynamic>;
+        final speedTest = data['speed_test'] as Map<String, dynamic>;
+        expect(speedTest['upload_megabytes_per_sec'], isNull);
+        expect(speedTest['download_megabytes_per_sec'], isNull);
+      });
+
+      test('reports null gradle_version when detection fails', () async {
+        when(
+          () => quickpatchFlutter.getVersionString(),
+        ).thenAnswer((_) async => '3.22.2');
+        when(() => gradlew.exists(any())).thenReturn(true);
+        when(() => gradlew.version(any())).thenThrow(Exception('gradle fail'));
+
+        await captureStdout(
+          () => runJsonWithOverrides(command.run),
+          captured: stdoutOutput,
+        );
+
+        final json = jsonDecode(stdoutOutput.first) as Map<String, dynamic>;
+        final data = json['data'] as Map<String, dynamic>;
+        final toolchain = data['android_toolchain'] as Map<String, dynamic>;
+        expect(toolchain['gradle_version'], isNull);
+      });
+    });
+  });
+}

@@ -1,0 +1,572 @@
+import 'dart:io';
+
+import 'package:args/args.dart';
+import 'package:mason_logger/mason_logger.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:path/path.dart' as p;
+import 'package:platform/platform.dart';
+import 'package:scoped_deps/scoped_deps.dart';
+import 'package:quickpatch_cli/src/artifact_builder/artifact_builder.dart';
+import 'package:quickpatch_cli/src/artifact_manager.dart';
+import 'package:quickpatch_cli/src/code_push_client_wrapper.dart';
+import 'package:quickpatch_cli/src/code_signer.dart';
+import 'package:quickpatch_cli/src/commands/commands.dart';
+import 'package:quickpatch_cli/src/common_arguments.dart';
+import 'package:quickpatch_cli/src/doctor.dart';
+import 'package:quickpatch_cli/src/logging/logging.dart';
+import 'package:quickpatch_cli/src/platform/platform.dart';
+import 'package:quickpatch_cli/src/release_type.dart';
+import 'package:pub_semver/pub_semver.dart';
+import 'package:quickpatch_cli/src/quickpatch_env.dart';
+import 'package:quickpatch_cli/src/quickpatch_flutter.dart';
+import 'package:quickpatch_cli/src/quickpatch_process.dart';
+import 'package:quickpatch_cli/src/quickpatch_validator.dart';
+import 'package:quickpatch_cli/src/validators/validators.dart';
+import 'package:quickpatch_code_push_client/quickpatch_code_push_client.dart';
+import 'package:test/test.dart';
+
+import '../../matchers.dart';
+import '../../mocks.dart';
+
+void main() {
+  group(LinuxReleaser, () {
+    late ArgResults argResults;
+    late ArtifactBuilder artifactBuilder;
+    late ArtifactManager artifactManager;
+    late CodePushClientWrapper codePushClientWrapper;
+    late CodeSigner codeSigner;
+    late Directory releaseDirectory;
+    late Doctor doctor;
+    late QuickPatchLogger logger;
+    late FlavorValidator flavorValidator;
+    late Directory projectRoot;
+    late Linux linux;
+    late Progress progress;
+    late QuickPatchProcess quickpatchProcess;
+    late QuickPatchEnv quickpatchEnv;
+    late QuickPatchFlutter quickpatchFlutter;
+    late QuickPatchValidator quickpatchValidator;
+    late LinuxReleaser releaser;
+
+    R runWithOverrides<R>(R Function() body) {
+      return runScoped(
+        body,
+        values: {
+          artifactBuilderRef.overrideWith(() => artifactBuilder),
+          artifactManagerRef.overrideWith(() => artifactManager),
+          codePushClientWrapperRef.overrideWith(() => codePushClientWrapper),
+          codeSignerRef.overrideWith(() => codeSigner),
+          doctorRef.overrideWith(() => doctor),
+          linuxRef.overrideWith(() => linux),
+          loggerRef.overrideWith(() => logger),
+          processRef.overrideWith(() => quickpatchProcess),
+          quickpatchEnvRef.overrideWith(() => quickpatchEnv),
+          quickpatchFlutterRef.overrideWith(() => quickpatchFlutter),
+          quickpatchValidatorRef.overrideWith(() => quickpatchValidator),
+        },
+      );
+    }
+
+    setUpAll(() {
+      registerFallbackValue(Directory(''));
+      registerFallbackValue(File(''));
+      registerFallbackValue(ReleasePlatform.linux);
+    });
+
+    setUp(() {
+      argResults = MockArgResults();
+      artifactBuilder = MockArtifactBuilder();
+      artifactManager = MockArtifactManager();
+      codePushClientWrapper = MockCodePushClientWrapper();
+      codeSigner = MockCodeSigner();
+      doctor = MockDoctor();
+      flavorValidator = MockFlavorValidator();
+      linux = MockLinux();
+      progress = MockProgress();
+      projectRoot = Directory.systemTemp.createTempSync();
+      logger = MockQuickPatchLogger();
+      quickpatchProcess = MockQuickPatchProcess();
+      quickpatchEnv = MockQuickPatchEnv();
+      quickpatchFlutter = MockQuickPatchFlutter();
+      quickpatchValidator = MockQuickPatchValidator();
+
+      when(() => argResults.rest).thenReturn([]);
+      when(() => argResults.wasParsed(any())).thenReturn(false);
+      when(() => argResults['flutter-version']).thenReturn('latest');
+
+      releaseDirectory = Directory(
+        p.join(projectRoot.path, 'build', 'linux', 'x64', 'release', 'bundle'),
+      )..createSync(recursive: true);
+
+      when(
+        () => artifactManager.linuxBundleDirectory,
+      ).thenReturn(releaseDirectory);
+
+      when(() => logger.progress(any())).thenReturn(progress);
+
+      when(
+        () => quickpatchEnv.getShorebirdProjectRoot(),
+      ).thenReturn(projectRoot);
+
+      releaser = LinuxReleaser(
+        argResults: argResults,
+        flavor: null,
+        target: null,
+      );
+    });
+
+    group('releaseType', () {
+      test('is linux', () {
+        expect(releaser.releaseType, ReleaseType.linux);
+      });
+    });
+
+    group('minimumFlutterVersion', () {
+      test('is 3.27.4', () {
+        expect(releaser.minimumFlutterVersion, Version(3, 27, 4));
+      });
+    });
+
+    group('artifactDisplayName', () {
+      test('has expected value', () {
+        expect(releaser.artifactDisplayName, 'Linux app');
+      });
+    });
+
+    group('assertArgsAreValid', () {
+      group('when release-version is passed', () {
+        setUp(() {
+          when(() => argResults.wasParsed('release-version')).thenReturn(true);
+        });
+
+        test('logs error and exits with usage err', () async {
+          await expectLater(
+            () => runWithOverrides(releaser.assertArgsAreValid),
+            exitsWithCode(ExitCode.usage),
+          );
+
+          verify(
+            () => logger.err(
+              '''
+The "--release-version" flag is only supported for aar and ios-framework releases.
+
+To change the version of this release, change your app's version in your pubspec.yaml.''',
+            ),
+          ).called(1);
+        });
+      });
+
+      group('when --obfuscate is passed', () {
+        setUp(() {
+          when(() => argResults['obfuscate']).thenReturn(true);
+          when(() => argResults.wasParsed('obfuscate')).thenReturn(true);
+          when(() => quickpatchEnv.flutterRevision).thenReturn('deadbeef');
+        });
+
+        group('when Flutter version supports obfuscation', () {
+          setUp(() {
+            when(
+              () => quickpatchFlutter.resolveFlutterVersion(any()),
+            ).thenAnswer((_) async => Version(3, 41, 2));
+          });
+
+          test('returns normally', () async {
+            await expectLater(
+              runWithOverrides(releaser.assertArgsAreValid),
+              completes,
+            );
+          });
+        });
+
+        group('when Flutter version does not support obfuscation', () {
+          setUp(() {
+            when(
+              () => quickpatchFlutter.resolveFlutterVersion(any()),
+            ).thenAnswer((_) async => Version(3, 27, 4));
+          });
+
+          test('logs error and exits', () async {
+            await expectLater(
+              () => runWithOverrides(releaser.assertArgsAreValid),
+              exitsWithCode(ExitCode.unavailable),
+            );
+          });
+        });
+      });
+
+      group('when --obfuscate is not passed', () {
+        test('returns normally', () async {
+          await expectLater(
+            runWithOverrides(releaser.assertArgsAreValid),
+            completes,
+          );
+        });
+      });
+    });
+
+    group('assertPreconditions', () {
+      setUp(() {
+        when(() => doctor.linuxCommandValidators).thenReturn([flavorValidator]);
+        when(flavorValidator.validate).thenAnswer((_) async => []);
+      });
+
+      group('when validation succeeds', () {
+        setUp(() {
+          when(
+            () => quickpatchValidator.validatePreconditions(
+              checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
+              checkShorebirdInitialized: any(
+                named: 'checkShorebirdInitialized',
+              ),
+              validators: any(named: 'validators'),
+              supportedOperatingSystems: any(
+                named: 'supportedOperatingSystems',
+              ),
+            ),
+          ).thenAnswer((_) async {});
+        });
+
+        test('returns normally', () async {
+          await expectLater(
+            () => runWithOverrides(releaser.assertPreconditions),
+            returnsNormally,
+          );
+        });
+      });
+
+      group('when validation fails', () {
+        final exception = ValidationFailedException();
+
+        setUp(() {
+          when(
+            () => quickpatchValidator.validatePreconditions(
+              checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
+              checkShorebirdInitialized: any(
+                named: 'checkShorebirdInitialized',
+              ),
+              validators: any(named: 'validators'),
+              supportedOperatingSystems: any(
+                named: 'supportedOperatingSystems',
+              ),
+            ),
+          ).thenThrow(exception);
+        });
+
+        test('exits with code 70', () async {
+          await expectLater(
+            () => runWithOverrides(releaser.assertPreconditions),
+            exitsWithCode(exception.exitCode),
+          );
+          verify(
+            () => quickpatchValidator.validatePreconditions(
+              checkUserIsAuthenticated: true,
+              checkShorebirdInitialized: true,
+              validators: [flavorValidator],
+              supportedOperatingSystems: {Platform.linux},
+            ),
+          ).called(1);
+        });
+      });
+
+      group('when flutter version is too old', () {
+        setUp(() {
+          when(
+            () => quickpatchValidator.validatePreconditions(
+              checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
+              checkShorebirdInitialized: any(
+                named: 'checkShorebirdInitialized',
+              ),
+              validators: any(named: 'validators'),
+              supportedOperatingSystems: any(
+                named: 'supportedOperatingSystems',
+              ),
+            ),
+          ).thenAnswer((_) async {});
+          when(
+            () => argResults['flutter-version'] as String?,
+          ).thenReturn('3.27.1');
+          when(
+            () => quickpatchFlutter.resolveFlutterVersion('3.27.1'),
+          ).thenAnswer((_) async => Version(3, 27, 1));
+        });
+      });
+    });
+
+    group('buildReleaseArtifacts', () {
+      setUp(() {
+        when(
+          () => artifactBuilder.buildLinuxApp(
+            target: any(named: 'target'),
+            args: any(named: 'args'),
+            base64PublicKey: any(named: 'base64PublicKey'),
+            ddMaxBytes: any(named: 'ddMaxBytes'),
+          ),
+        ).thenAnswer((_) async => projectRoot);
+      });
+
+      test('returns path to release directory', () async {
+        final releaseDir = await runWithOverrides(
+          releaser.buildReleaseArtifacts,
+        );
+        expect(releaseDir, releaseDirectory);
+      });
+
+      group('when target and flavor are specified', () {
+        const flavor = 'my-flavor';
+        const target = 'my-target';
+
+        setUp(() {
+          releaser = LinuxReleaser(
+            argResults: argResults,
+            flavor: flavor,
+            target: target,
+          );
+        });
+
+        test('builds artifacts with flavor and target', () async {
+          await runWithOverrides(releaser.buildReleaseArtifacts);
+          verify(
+            () => artifactBuilder.buildLinuxApp(target: target, args: []),
+          ).called(1);
+        });
+      });
+
+      group('when additional args are specified', () {
+        final args = ['--build-number=0 --build-name=1.0.0+1'];
+        setUp(() {
+          when(() => argResults.rest).thenReturn(args);
+        });
+
+        test('forwards args to artifact builder', () async {
+          await runWithOverrides(releaser.buildReleaseArtifacts);
+          verify(() => artifactBuilder.buildLinuxApp(args: args)).called(1);
+        });
+      });
+
+      group('when public key is passed as an arg', () {
+        setUp(() {
+          final publicKeyFile = File(
+            p.join(
+              Directory.systemTemp.createTempSync().path,
+              'public-key.pem',
+            ),
+          )..createSync(recursive: true);
+          when(
+            () => argResults.wasParsed(CommonArguments.publicKeyArg.name),
+          ).thenReturn(true);
+          when(
+            () => argResults[CommonArguments.publicKeyArg.name],
+          ).thenReturn(publicKeyFile.path);
+          when(
+            () => codeSigner.base64PublicKeyFromPem(any()),
+          ).thenReturn('encoded_public_key');
+        });
+
+        test('passes public key to buildLinuxApp', () async {
+          await runWithOverrides(releaser.buildReleaseArtifacts);
+          verify(
+            () => artifactBuilder.buildLinuxApp(
+              base64PublicKey: 'encoded_public_key',
+              target: any(named: 'target'),
+              args: any(named: 'args'),
+            ),
+          ).called(1);
+        });
+      });
+
+      group('when a public-key-cmd is provided', () {
+        setUp(() {
+          when(
+            () => argResults[CommonArguments.publicKeyCmd.name],
+          ).thenReturn('get-key-cmd');
+          when(
+            () => argResults.wasParsed(CommonArguments.publicKeyCmd.name),
+          ).thenReturn(true);
+
+          when(
+            () => codeSigner.runPublicKeyCmd(any()),
+          ).thenAnswer((_) async => 'pem-public-key');
+          when(
+            () => codeSigner.base64PublicKeyFromPem(any()),
+          ).thenReturn('encoded_public_key_from_cmd');
+        });
+
+        test('passes public key to buildLinuxApp', () async {
+          await runWithOverrides(releaser.buildReleaseArtifacts);
+          verify(
+            () => codeSigner.runPublicKeyCmd('get-key-cmd'),
+          ).called(1);
+          verify(
+            () => artifactBuilder.buildLinuxApp(
+              base64PublicKey: 'encoded_public_key_from_cmd',
+              target: any(named: 'target'),
+              args: any(named: 'args'),
+            ),
+          ).called(1);
+        });
+      });
+
+      group('when --obfuscate is passed', () {
+        setUp(() {
+          when(() => argResults['obfuscate']).thenReturn(true);
+          when(() => argResults.wasParsed('obfuscate')).thenReturn(true);
+          when(() => quickpatchEnv.flutterRevision).thenReturn('deadbeef');
+          // Non-Android pipelines always pre-strip in gen_snapshot.
+          when(
+            () => quickpatchFlutter.shouldPreStripLibappInGenSnapshot(
+              platform: any(named: 'platform'),
+              flutterRevision: any(named: 'flutterRevision'),
+            ),
+          ).thenAnswer((_) async => true);
+          // Simulate the build creating the obfuscation map.
+          when(
+            () => artifactBuilder.buildLinuxApp(
+              target: any(named: 'target'),
+              args: any(named: 'args'),
+              base64PublicKey: any(named: 'base64PublicKey'),
+              ddMaxBytes: any(named: 'ddMaxBytes'),
+            ),
+          ).thenAnswer((_) async {
+            final mapPath = p.join(
+              projectRoot.path,
+              'build',
+              'quickpatch',
+              'obfuscation_map.json',
+            );
+            File(mapPath)
+              ..createSync(recursive: true)
+              ..writeAsStringSync('{}');
+          });
+        });
+
+        test('injects --save-obfuscation-map into build args', () async {
+          await runWithOverrides(releaser.buildReleaseArtifacts);
+
+          final captured = verify(
+            () => artifactBuilder.buildLinuxApp(
+              target: any(named: 'target'),
+              args: captureAny(named: 'args'),
+              base64PublicKey: any(named: 'base64PublicKey'),
+              ddMaxBytes: any(named: 'ddMaxBytes'),
+            ),
+          ).captured;
+
+          final args = captured.last as List<String>;
+          expect(
+            args.any(
+              (a) => a.startsWith(
+                '--extra-gen-snapshot-options=--save-obfuscation-map=',
+              ),
+            ),
+            isTrue,
+          );
+        });
+
+        test('logs detail about map location', () async {
+          await runWithOverrides(releaser.buildReleaseArtifacts);
+
+          verify(
+            () => logger.detail(
+              any(that: startsWith('Obfuscation map saved to')),
+            ),
+          ).called(1);
+        });
+
+        group('when obfuscation map is not generated', () {
+          setUp(() {
+            // Override to NOT create the map file.
+            when(
+              () => artifactBuilder.buildLinuxApp(
+                target: any(named: 'target'),
+                args: any(named: 'args'),
+                base64PublicKey: any(named: 'base64PublicKey'),
+                ddMaxBytes: any(named: 'ddMaxBytes'),
+              ),
+            ).thenAnswer((_) async {});
+          });
+
+          test('logs error and exits', () async {
+            await expectLater(
+              () => runWithOverrides(releaser.buildReleaseArtifacts),
+              exitsWithCode(ExitCode.software),
+            );
+
+            verify(
+              () => logger.err(
+                any(
+                  that: contains(
+                    'Obfuscation was enabled but the obfuscation map was not',
+                  ),
+                ),
+              ),
+            ).called(1);
+          });
+        });
+      });
+    });
+
+    group('getReleaseVersion', () {
+      setUp(() {
+        when(
+          () => linux.versionFromLinuxBundle(
+            bundleRoot: any(named: 'bundleRoot'),
+          ),
+        ).thenReturn('3.27.3');
+      });
+
+      test('returns version from linux bundle', () async {
+        final version = await runWithOverrides(
+          () =>
+              releaser.getReleaseVersion(releaseArtifactRoot: releaseDirectory),
+        );
+        expect(version, '3.27.3');
+      });
+    });
+
+    group('uploadReleaseArtifacts', () {
+      const appId = 'my-app';
+      const releaseId = 123;
+      late Release release;
+
+      setUp(() {
+        release = MockRelease();
+        when(() => release.id).thenReturn(releaseId);
+        when(
+          () => codePushClientWrapper.createLinuxReleaseArtifacts(
+            appId: any(named: 'appId'),
+            releaseId: any(named: 'releaseId'),
+            bundle: any(named: 'bundle'),
+          ),
+        ).thenAnswer((_) async {});
+      });
+
+      test('zips and uploads release directory', () async {
+        await runWithOverrides(
+          () => releaser.uploadReleaseArtifacts(release: release, appId: appId),
+        );
+        verify(
+          () => codePushClientWrapper.createLinuxReleaseArtifacts(
+            appId: appId,
+            releaseId: releaseId,
+            bundle: any(named: 'bundle'),
+          ),
+        ).called(1);
+      });
+    });
+
+    group('postReleaseInstructions', () {
+      test('returns nonempty instructions', () {
+        final instructions = runWithOverrides(
+          () => releaser.postReleaseInstructions,
+        );
+        expect(
+          instructions,
+          equals('''
+
+Linux release created at ${artifactManager.linuxBundleDirectory.path}.
+'''),
+        );
+      });
+    });
+  });
+}

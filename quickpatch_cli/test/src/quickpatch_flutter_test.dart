@@ -1,0 +1,1165 @@
+// cspell:words revis
+import 'dart:io';
+
+import 'package:mason_logger/mason_logger.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:path/path.dart' as p;
+import 'package:platform/platform.dart';
+import 'package:pub_semver/pub_semver.dart';
+import 'package:scoped_deps/scoped_deps.dart';
+import 'package:quickpatch_cli/src/executables/executables.dart';
+import 'package:quickpatch_cli/src/logging/logging.dart';
+import 'package:quickpatch_cli/src/platform.dart';
+import 'package:quickpatch_cli/src/quickpatch_env.dart';
+import 'package:quickpatch_cli/src/quickpatch_flutter.dart';
+import 'package:quickpatch_cli/src/quickpatch_process.dart';
+import 'package:quickpatch_code_push_protocol/quickpatch_code_push_protocol.dart';
+import 'package:test/test.dart';
+
+import 'mocks.dart';
+
+void main() {
+  group(QuickPatchFlutter, () {
+    const flutterRevision = 'flutter-revision';
+    late Directory quickpatchRoot;
+    late Directory flutterDirectory;
+    late Git git;
+    late QuickPatchLogger logger;
+    late Platform platform;
+    late Progress progress;
+    late QuickPatchEnv quickpatchEnv;
+    late QuickPatchProcess process;
+    late QuickPatchProcessResult versionProcessResult;
+    late QuickPatchProcessResult precacheProcessResult;
+    late QuickPatchFlutter quickpatchFlutter;
+
+    R runWithOverrides<R>(R Function() body) {
+      return runScoped(
+        body,
+        values: {
+          gitRef.overrideWith(() => git),
+          loggerRef.overrideWith(() => logger),
+          platformRef.overrideWith(() => platform),
+          processRef.overrideWith(() => process),
+          quickpatchEnvRef.overrideWith(() => quickpatchEnv),
+        },
+      );
+    }
+
+    setUp(() {
+      quickpatchRoot = Directory.systemTemp.createTempSync();
+      flutterDirectory = Directory(p.join(quickpatchRoot.path, 'flutter'));
+      git = MockGit();
+      logger = MockQuickPatchLogger();
+      progress = MockProgress();
+      quickpatchEnv = MockQuickPatchEnv();
+      platform = MockPlatform();
+      process = MockQuickPatchProcess();
+      versionProcessResult = MockQuickPatchProcessResult();
+      precacheProcessResult = MockQuickPatchProcessResult();
+      quickpatchFlutter = runWithOverrides(QuickPatchFlutter.new);
+
+      when(
+        () => git.clone(
+          url: any(named: 'url'),
+          outputDirectory: any(named: 'outputDirectory'),
+          args: any(named: 'args'),
+        ),
+      ).thenAnswer((_) async => {});
+      when(
+        () => git.checkout(
+          directory: any(named: 'directory'),
+          revision: any(named: 'revision'),
+        ),
+      ).thenAnswer((_) async => {});
+      when(
+        () => git.status(
+          directory: p.join(flutterDirectory.parent.path, flutterRevision),
+          args: ['--untracked-files=no', '--porcelain'],
+        ),
+      ).thenAnswer((_) async => '');
+      when(
+        () => git.fetch(directory: any(named: 'directory')),
+      ).thenAnswer((_) async {});
+      when(
+        () => git.revParse(
+          revision: any(named: 'revision'),
+          directory: any(named: 'directory'),
+        ),
+      ).thenAnswer((_) async => flutterRevision);
+      when(
+        () => git.forEachRef(
+          directory: any(named: 'directory'),
+          contains: any(named: 'contains'),
+          format: any(named: 'format'),
+          pattern: any(named: 'pattern'),
+        ),
+      ).thenAnswer((_) async => 'origin/flutter_release/3.10.6');
+      when(() => logger.progress(any())).thenReturn(progress);
+      when(() => platform.isMacOS).thenReturn(false);
+      when(() => quickpatchEnv.flutterDirectory).thenReturn(flutterDirectory);
+      when(() => quickpatchEnv.flutterRevision).thenReturn(flutterRevision);
+      when(
+        () => process.run('flutter', ['--version'], useVendedFlutter: false),
+      ).thenAnswer((_) async => versionProcessResult);
+      when(() => versionProcessResult.exitCode).thenReturn(0);
+      when(
+        () => process.run(
+          'flutter',
+          any(that: contains('precache')),
+          workingDirectory: any(named: 'workingDirectory'),
+        ),
+      ).thenAnswer((_) async => precacheProcessResult);
+      when(
+        () => precacheProcessResult.exitCode,
+      ).thenReturn(ExitCode.success.code);
+      when(() => precacheProcessResult.stderr).thenReturn('');
+    });
+
+    group('precacheArgs', () {
+      group('when running on macOS', () {
+        setUp(() {
+          when(() => platform.isMacOS).thenReturn(true);
+        });
+
+        test('includes ios in platform list', () async {
+          expect(
+            runWithOverrides(() => quickpatchFlutter.precacheArgs),
+            contains('--ios'),
+          );
+        });
+      });
+
+      group('when not running on macOS', () {
+        setUp(() {
+          when(() => platform.isMacOS).thenReturn(false);
+        });
+
+        test('does not include ios in platform list', () {
+          expect(
+            runWithOverrides(() => quickpatchFlutter.precacheArgs),
+            isNot(contains('--ios')),
+          );
+        });
+      });
+    });
+
+    group('getConfig', () {
+      late QuickPatchProcessResult configProcessResult;
+
+      setUp(() {
+        configProcessResult = MockProcessResult();
+        when(
+          () => process.runSync(any(), any()),
+        ).thenReturn(configProcessResult);
+      });
+
+      group('when process exists with non-zero code', () {
+        setUp(() {
+          when(
+            () => configProcessResult.exitCode,
+          ).thenReturn(ExitCode.software.code);
+          when(() => configProcessResult.stderr).thenReturn('oops');
+        });
+
+        test('returns empty map', () {
+          expect(runWithOverrides(quickpatchFlutter.getConfig), isEmpty);
+          verify(
+            () => process.runSync('flutter', ['config', '--list']),
+          ).called(1);
+        });
+      });
+
+      group('when process completes successfully', () {
+        setUp(() {
+          when(() => configProcessResult.stdout).thenReturn(r'''
+All Settings:
+  enable-web: (Not set)
+  enable-linux-desktop: (Not set)
+  enable-macos-desktop: (Not set)
+  enable-windows-desktop: (Not set)
+  enable-android: (Not set)
+  enable-ios: (Not set)
+  enable-fuchsia: (Not set) (Unavailable)
+  enable-custom-devices: (Not set)
+  cli-animations: (Not set)
+  enable-native-assets: (Not set) (Unavailable)
+  enable-flutter-preview: (Not set) (Unavailable)
+  enable-swift-package-manager: (Not set)
+  explicit-package-dependencies: (Not set)
+  jdk-dir: C:\Program Files\Android\Android Studio\jdk
+  ''');
+          when(
+            () => configProcessResult.exitCode,
+          ).thenReturn(ExitCode.success.code);
+        });
+
+        test('returns correct config map', () {
+          expect(
+            runWithOverrides(quickpatchFlutter.getConfig),
+            equals({
+              'enable-web': '(Not set)',
+              'enable-linux-desktop': '(Not set)',
+              'enable-macos-desktop': '(Not set)',
+              'enable-windows-desktop': '(Not set)',
+              'enable-android': '(Not set)',
+              'enable-ios': '(Not set)',
+              'enable-fuchsia': '(Not set) (Unavailable)',
+              'enable-custom-devices': '(Not set)',
+              'cli-animations': '(Not set)',
+              'enable-native-assets': '(Not set) (Unavailable)',
+              'enable-flutter-preview': '(Not set) (Unavailable)',
+              'enable-swift-package-manager': '(Not set)',
+              'explicit-package-dependencies': '(Not set)',
+              'jdk-dir': r'C:\Program Files\Android\Android Studio\jdk',
+            }),
+          );
+        });
+      });
+    });
+
+    group('getSystemVersion', () {
+      test(
+        'throws ProcessException when process exits with non-zero code',
+        () async {
+          const error = 'oops';
+          when(
+            () => versionProcessResult.exitCode,
+          ).thenReturn(ExitCode.software.code);
+          when(() => versionProcessResult.stderr).thenReturn(error);
+          await expectLater(
+            runWithOverrides(quickpatchFlutter.getSystemVersion),
+            throwsA(isA<ProcessException>()),
+          );
+          verify(
+            () =>
+                process.run('flutter', ['--version'], useVendedFlutter: false),
+          ).called(1);
+        },
+      );
+
+      test('returns null when cannot parse version', () async {
+        when(() => versionProcessResult.stdout).thenReturn('');
+        await expectLater(
+          runWithOverrides(quickpatchFlutter.getSystemVersion),
+          completion(isNull),
+        );
+        verify(
+          () => process.run('flutter', ['--version'], useVendedFlutter: false),
+        ).called(1);
+      });
+
+      test('returns version when able to parse the string', () async {
+        when(() => versionProcessResult.stdout).thenReturn('''
+Flutter 3.10.6 • channel stable • git@github.com:flutter/flutter.git
+Framework • revision f468f3366c (4 weeks ago) • 2023-07-12 15:19:05 -0700
+Engine • revision cdbeda788a
+Tools • Dart 3.0.6 • DevTools 2.23.1''');
+        await expectLater(
+          runWithOverrides(quickpatchFlutter.getSystemVersion),
+          completion(equals('3.10.6')),
+        );
+        verify(
+          () => process.run('flutter', ['--version'], useVendedFlutter: false),
+        ).called(1);
+      });
+    });
+
+    group('getVersionAndRevision', () {
+      group('when unable to determine version', () {
+        const error = 'oops';
+        setUp(() {
+          when(
+            () => git.forEachRef(
+              directory: any(named: 'directory'),
+              contains: any(named: 'contains'),
+              format: any(named: 'format'),
+              pattern: any(named: 'pattern'),
+            ),
+          ).thenThrow(
+            ProcessException(
+              'git',
+              [
+                'for-each-ref',
+                '--format',
+                '%(refname:short)',
+                'refs/remotes/origin/flutter_release/*',
+              ],
+              error,
+              ExitCode.software.code,
+            ),
+          );
+        });
+
+        test('returns unknown (<revision>)', () async {
+          await expectLater(
+            runWithOverrides(quickpatchFlutter.getVersionAndRevision),
+            completion(equals('unknown (${flutterRevision.substring(0, 10)})')),
+          );
+        });
+      });
+
+      test('returns correct version and revision', () async {
+        await expectLater(
+          runWithOverrides(quickpatchFlutter.getVersionAndRevision),
+          completion(equals('3.10.6 (${flutterRevision.substring(0, 10)})')),
+        );
+      });
+    });
+
+    group('resolveFlutterRevision', () {
+      group('when input is a semver version', () {
+        test(
+          'returns the revision associated with the version if it exists',
+          () async {
+            final revision = await runWithOverrides(
+              () => quickpatchFlutter.resolveFlutterRevision('3.10.6'),
+            );
+            expect(revision, equals(flutterRevision));
+          },
+        );
+      });
+
+      group('when input is a valid git hash that exists locally', () {
+        const fullHash = 'eead750584a909f506eb6fc111ece5d8fed4aa39';
+
+        setUp(() {
+          when(
+            () => git.revParse(
+              revision: any(named: 'revision'),
+              directory: any(named: 'directory'),
+            ),
+          ).thenAnswer((_) async => fullHash);
+        });
+
+        test('returns full hash for full input', () async {
+          final revision = await runWithOverrides(
+            () => quickpatchFlutter.resolveFlutterRevision(fullHash),
+          );
+          expect(revision, equals(fullHash));
+        });
+
+        test('returns full hash for short input', () async {
+          final revision = await runWithOverrides(
+            () => quickpatchFlutter.resolveFlutterRevision('deadbeef'),
+          );
+          expect(revision, equals(fullHash));
+        });
+      });
+
+      group('when input is a valid git hash format but does not exist', () {
+        setUp(() {
+          when(
+            () => git.revParse(
+              revision: any(named: 'revision'),
+              directory: any(named: 'directory'),
+            ),
+          ).thenThrow(
+            const ProcessException('git', ['rev-parse']),
+          );
+        });
+
+        test('returns null', () async {
+          const validHash = 'eead750584a909f506eb6fc111ece5d8fed4aa39';
+          final revision = await runWithOverrides(
+            () => quickpatchFlutter.resolveFlutterRevision(validHash),
+          );
+          expect(revision, isNull);
+        });
+      });
+
+      group('when input is not a valid git hash format', () {
+        test('returns null for too-short hash', () async {
+          final revision = await runWithOverrides(
+            () => quickpatchFlutter.resolveFlutterRevision('abc'),
+          );
+          expect(revision, isNull);
+        });
+
+        test('returns null for non-hex string', () async {
+          final revision = await runWithOverrides(
+            () => quickpatchFlutter.resolveFlutterRevision('not-a-version'),
+          );
+          expect(revision, isNull);
+        });
+      });
+    });
+
+    group('resolveFlutterVersion', () {
+      group('when input is a semver version', () {
+        test(
+          'returns the revision associated with the version if it exists',
+          () async {
+            final revision = await runWithOverrides(
+              () => quickpatchFlutter.resolveFlutterVersion('3.10.6'),
+            );
+            expect(revision, equals(Version(3, 10, 6)));
+          },
+        );
+      });
+
+      group('when input is not a recognized commit hash', () {
+        setUp(() {
+          when(
+            () => git.forEachRef(
+              directory: any(named: 'directory'),
+              contains: any(named: 'contains'),
+              format: any(named: 'format'),
+              pattern: any(named: 'pattern'),
+            ),
+          ).thenAnswer((_) async => '');
+        });
+
+        test('returns null', () async {
+          final revision = await runWithOverrides(
+            () => quickpatchFlutter.resolveFlutterVersion('not-a-version'),
+          );
+          expect(revision, isNull);
+        });
+      });
+
+      group('when commit lookup fails', () {
+        setUp(() {
+          when(
+            () => git.forEachRef(
+              directory: any(named: 'directory'),
+              contains: any(named: 'contains'),
+              format: any(named: 'format'),
+              pattern: any(named: 'pattern'),
+            ),
+          ).thenThrow(Exception('oops'));
+        });
+
+        test('returns null', () async {
+          final revision = await runWithOverrides(
+            () => quickpatchFlutter.resolveFlutterVersion('not-a-version'),
+          );
+          expect(revision, isNull);
+        });
+      });
+
+      group('when input is a recognized commit hash', () {
+        setUp(() {
+          when(
+            () => git.forEachRef(
+              directory: any(named: 'directory'),
+              contains: any(named: 'contains'),
+              format: any(named: 'format'),
+              pattern: any(named: 'pattern'),
+            ),
+          ).thenAnswer((_) async => 'origin/flutter_release/1.2.3');
+        });
+
+        test('returns a parsed version', () async {
+          final revision = await runWithOverrides(
+            () => quickpatchFlutter.resolveFlutterVersion('deadbeef'),
+          );
+          expect(revision, equals(Version(1, 2, 3)));
+        });
+      });
+    });
+
+    group('shouldPreStripLibappInGenSnapshot', () {
+      test('returns true on iOS regardless of Flutter version', () async {
+        when(
+          () => git.forEachRef(
+            directory: any(named: 'directory'),
+            contains: any(named: 'contains'),
+            format: any(named: 'format'),
+            pattern: any(named: 'pattern'),
+          ),
+        ).thenAnswer((_) async => 'origin/flutter_release/3.44.0');
+
+        final result = await runWithOverrides(
+          () => quickpatchFlutter.shouldPreStripLibappInGenSnapshot(
+            platform: ReleasePlatform.ios,
+            flutterRevision: 'deadbeef',
+          ),
+        );
+        expect(result, isTrue);
+      });
+
+      test('returns true on Android when Flutter is older than 3.44', () async {
+        when(
+          () => git.forEachRef(
+            directory: any(named: 'directory'),
+            contains: any(named: 'contains'),
+            format: any(named: 'format'),
+            pattern: any(named: 'pattern'),
+          ),
+        ).thenAnswer((_) async => 'origin/flutter_release/3.43.0');
+
+        final result = await runWithOverrides(
+          () => quickpatchFlutter.shouldPreStripLibappInGenSnapshot(
+            platform: ReleasePlatform.android,
+            flutterRevision: 'deadbeef',
+          ),
+        );
+        expect(result, isTrue);
+      });
+
+      test('returns false on Android when Flutter is 3.44 or newer', () async {
+        when(
+          () => git.forEachRef(
+            directory: any(named: 'directory'),
+            contains: any(named: 'contains'),
+            format: any(named: 'format'),
+            pattern: any(named: 'pattern'),
+          ),
+        ).thenAnswer((_) async => 'origin/flutter_release/3.44.0');
+
+        final result = await runWithOverrides(
+          () => quickpatchFlutter.shouldPreStripLibappInGenSnapshot(
+            platform: ReleasePlatform.android,
+            flutterRevision: 'deadbeef',
+          ),
+        );
+        expect(result, isFalse);
+      });
+
+      test(
+        '''returns false on Android when the version cannot be resolved (development pin)''',
+        () async {
+          // Unresolvable revisions (e.g. development branches) fall back to the
+          // constraint's min version, so users on bleeding-edge pins get the
+          // 3.44+ AGP-stripped behavior rather than the pre-strip path.
+          when(
+            () => git.forEachRef(
+              directory: any(named: 'directory'),
+              contains: any(named: 'contains'),
+              format: any(named: 'format'),
+              pattern: any(named: 'pattern'),
+            ),
+          ).thenAnswer((_) async => '');
+
+          final result = await runWithOverrides(
+            () => quickpatchFlutter.shouldPreStripLibappInGenSnapshot(
+              platform: ReleasePlatform.android,
+              flutterRevision: 'deadbeef',
+            ),
+          );
+          expect(result, isFalse);
+        },
+      );
+    });
+
+    group('fetchRemoteRefs', () {
+      test('fetches from remote', () async {
+        when(
+          () => git.fetch(directory: any(named: 'directory')),
+        ).thenAnswer((_) async {});
+
+        await runWithOverrides(
+          () => quickpatchFlutter.fetchRemoteRefs(),
+        );
+
+        verify(
+          () => git.fetch(directory: any(named: 'directory')),
+        ).called(1);
+      });
+
+      group('when fetch fails', () {
+        setUp(() {
+          when(
+            () => git.fetch(directory: any(named: 'directory')),
+          ).thenThrow(Exception('no network'));
+        });
+
+        test('logs a warning', () async {
+          await runWithOverrides(
+            () => quickpatchFlutter.fetchRemoteRefs(),
+          );
+
+          verify(
+            () => logger.warn(any(that: contains('stale'))),
+          ).called(1);
+        });
+      });
+    });
+
+    group('getRevisionForVersion', () {
+      const version = '3.16.3';
+      const exception = ProcessException('git', ['rev-parse']);
+
+      group('when process exits with non-zero code', () {
+        setUp(() {
+          when(
+            () => git.revParse(
+              revision: any(named: 'revision'),
+              directory: any(named: 'directory'),
+            ),
+          ).thenThrow(exception);
+        });
+
+        test('returns null', () async {
+          await expectLater(
+            runWithOverrides(
+              () => quickpatchFlutter.getRevisionForVersion(version),
+            ),
+            completion(isNull),
+          );
+          verify(
+            () => git.revParse(
+              revision: 'refs/remotes/origin/flutter_release/$version',
+              directory: any(named: 'directory'),
+            ),
+          ).called(1);
+        });
+      });
+
+      group('when cannot parse revision', () {
+        setUp(() {
+          when(
+            () => git.revParse(
+              revision: any(named: 'revision'),
+              directory: any(named: 'directory'),
+            ),
+          ).thenAnswer((_) async => '');
+        });
+
+        test('returns null', () async {
+          await expectLater(
+            runWithOverrides(
+              () => quickpatchFlutter.getRevisionForVersion(version),
+            ),
+            completion(isNull),
+          );
+          verify(
+            () => git.revParse(
+              revision: 'refs/remotes/origin/flutter_release/$version',
+              directory: any(named: 'directory'),
+            ),
+          ).called(1);
+        });
+      });
+
+      group('when able to parse the string', () {
+        const revision = '771d07b2cf97cf107bae6eeedcf41bdc9db772fa';
+        setUp(() {
+          when(
+            () => git.revParse(
+              revision: any(named: 'revision'),
+              directory: any(named: 'directory'),
+            ),
+          ).thenAnswer(
+            (_) async =>
+                '''
+$revision
+        ''',
+          );
+        });
+
+        test('returns revision', () async {
+          await expectLater(
+            runWithOverrides(
+              () => quickpatchFlutter.getRevisionForVersion(version),
+            ),
+            completion(equals(revision)),
+          );
+          verify(
+            () => git.revParse(
+              revision: 'refs/remotes/origin/flutter_release/$version',
+              directory: any(named: 'directory'),
+            ),
+          ).called(1);
+        });
+      });
+    });
+
+    group('getVersionString', () {
+      group('when process exits with non-zero code', () {
+        const error = 'oops';
+
+        setUp(() {
+          when(
+            () => git.forEachRef(
+              directory: any(named: 'directory'),
+              contains: any(named: 'contains'),
+              format: any(named: 'format'),
+              pattern: any(named: 'pattern'),
+            ),
+          ).thenThrow(
+            ProcessException(
+              'git',
+              [
+                'for-each-ref',
+                '--format',
+                '%(refname:short)',
+                'refs/remotes/origin/flutter_release/*',
+              ],
+              error,
+              ExitCode.software.code,
+            ),
+          );
+        });
+
+        test('throws ProcessException', () async {
+          await expectLater(
+            runWithOverrides(quickpatchFlutter.getVersionString),
+            throwsA(isA<ProcessException>()),
+          );
+          verify(
+            () => git.forEachRef(
+              directory: p.join(flutterDirectory.parent.path, flutterRevision),
+              contains: flutterRevision,
+              format: '%(refname:short)',
+              pattern: 'refs/remotes/origin/flutter_release/*',
+            ),
+          ).called(1);
+        });
+      });
+
+      group('when cannot parse version', () {
+        setUp(() {
+          when(
+            () => git.forEachRef(
+              directory: any(named: 'directory'),
+              contains: any(named: 'contains'),
+              format: any(named: 'format'),
+              pattern: any(named: 'pattern'),
+            ),
+          ).thenAnswer((_) async => '');
+        });
+
+        test('returns null', () async {
+          await expectLater(
+            runWithOverrides(quickpatchFlutter.getVersionString),
+            completion(isNull),
+          );
+          verify(
+            () => git.forEachRef(
+              directory: p.join(flutterDirectory.parent.path, flutterRevision),
+              contains: flutterRevision,
+              format: '%(refname:short)',
+              pattern: 'refs/remotes/origin/flutter_release/*',
+            ),
+          ).called(1);
+        });
+      });
+
+      group('when able to parse the string', () {
+        test('returns version', () async {
+          await expectLater(
+            runWithOverrides(quickpatchFlutter.getVersionString),
+            completion(equals('3.10.6')),
+          );
+          verify(
+            () => git.forEachRef(
+              directory: p.join(flutterDirectory.parent.path, flutterRevision),
+              contains: flutterRevision,
+              format: '%(refname:short)',
+              pattern: 'refs/remotes/origin/flutter_release/*',
+            ),
+          ).called(1);
+        });
+      });
+    });
+
+    group('getVersion', () {
+      group('when getVersionString returns null', () {
+        setUp(() {
+          when(
+            () => git.forEachRef(
+              directory: any(named: 'directory'),
+              contains: any(named: 'contains'),
+              format: any(named: 'format'),
+              pattern: any(named: 'pattern'),
+            ),
+          ).thenAnswer((_) async => '');
+        });
+
+        test('returns null', () {
+          expect(
+            runWithOverrides(quickpatchFlutter.getVersion),
+            completion(isNull),
+          );
+        });
+      });
+
+      group('when getVersionString returns an invalid string', () {
+        setUp(() {
+          when(
+            () => git.forEachRef(
+              directory: any(named: 'directory'),
+              contains: any(named: 'contains'),
+              format: any(named: 'format'),
+              pattern: any(named: 'pattern'),
+            ),
+          ).thenAnswer((_) async => 'not a version');
+        });
+
+        test('returns null', () {
+          expect(
+            runWithOverrides(quickpatchFlutter.getVersion),
+            completion(isNull),
+          );
+        });
+      });
+
+      group('when getVersionString returns a valid string', () {
+        setUp(() {
+          when(
+            () => git.forEachRef(
+              directory: any(named: 'directory'),
+              contains: any(named: 'contains'),
+              format: any(named: 'format'),
+              pattern: any(named: 'pattern'),
+            ),
+          ).thenAnswer((_) async => '3.10.6');
+        });
+
+        test('returns the version', () {
+          expect(
+            runWithOverrides(quickpatchFlutter.getVersion),
+            completion(equals(Version(3, 10, 6))),
+          );
+        });
+      });
+    });
+
+    group('getVersions', () {
+      const format = '%(refname:short)';
+      const pattern = 'refs/remotes/origin/flutter_release/*';
+      test('returns a list of versions', () async {
+        const versions = [
+          '3.10.0',
+          '3.10.1',
+          '3.10.2',
+          '3.10.3',
+          '3.10.4',
+          '3.10.5',
+          '3.10.6',
+        ];
+        const output = '''
+origin/flutter_release/3.10.0
+origin/flutter_release/3.10.1
+origin/flutter_release/3.10.2
+origin/flutter_release/3.10.3
+origin/flutter_release/3.10.4
+origin/flutter_release/3.10.5
+origin/flutter_release/3.10.6''';
+        when(
+          () => git.forEachRef(
+            directory: any(named: 'directory'),
+            format: any(named: 'format'),
+            pattern: any(named: 'pattern'),
+          ),
+        ).thenAnswer((_) async => output);
+
+        await expectLater(
+          runWithOverrides(quickpatchFlutter.getVersions),
+          completion(equals(versions)),
+        );
+        verify(
+          () => git.forEachRef(
+            directory: p.join(flutterDirectory.parent.path, flutterRevision),
+            format: format,
+            pattern: pattern,
+          ),
+        ).called(1);
+      });
+
+      test(
+        'throws ProcessException when git command exits non-zero code',
+        () async {
+          const errorMessage = 'oh no!';
+          when(
+            () => git.forEachRef(
+              directory: any(named: 'directory'),
+              format: any(named: 'format'),
+              pattern: any(named: 'pattern'),
+            ),
+          ).thenThrow(
+            ProcessException(
+              'git',
+              ['for-each-ref', '--format', format, pattern],
+              errorMessage,
+              ExitCode.software.code,
+            ),
+          );
+
+          expect(
+            runWithOverrides(quickpatchFlutter.getVersions),
+            throwsA(
+              isA<ProcessException>().having(
+                (e) => e.message,
+                'message',
+                errorMessage,
+              ),
+            ),
+          );
+        },
+      );
+    });
+
+    group('installRevision', () {
+      const revision = 'test-revision';
+
+      test('does nothing if the revision is already installed', () async {
+        Directory(
+          p.join(flutterDirectory.parent.path, revision),
+        ).createSync(recursive: true);
+
+        await runWithOverrides(
+          () => quickpatchFlutter.installRevision(revision: revision),
+        );
+
+        verifyNever(
+          () => git.clone(
+            url: any(named: 'url'),
+            outputDirectory: any(named: 'outputDirectory'),
+            args: any(named: 'args'),
+          ),
+        );
+        verifyNever(
+          () => process.run('flutter', any(that: contains('precache'))),
+        );
+      });
+
+      test('throws exception if unable to clone', () async {
+        final exception = Exception('oops');
+        when(
+          () => git.clone(
+            url: any(named: 'url'),
+            outputDirectory: any(named: 'outputDirectory'),
+            args: any(named: 'args'),
+          ),
+        ).thenThrow(exception);
+
+        await expectLater(
+          runWithOverrides(
+            () => quickpatchFlutter.installRevision(revision: revision),
+          ),
+          throwsA(exception),
+        );
+
+        verify(
+          () => git.clone(
+            url: QuickPatchFlutter.flutterGitUrl,
+            outputDirectory: p.join(flutterDirectory.parent.path, revision),
+            args: ['--filter=tree:0', '--no-checkout'],
+          ),
+        ).called(1);
+        verifyNever(
+          () => process.run('flutter', any(that: contains('precache'))),
+        );
+      });
+
+      test('throws exception if unable to checkout revision', () async {
+        final exception = Exception('oops');
+        when(
+          () => git.checkout(
+            directory: any(named: 'directory'),
+            revision: any(named: 'revision'),
+          ),
+        ).thenThrow(exception);
+
+        await expectLater(
+          runWithOverrides(
+            () => quickpatchFlutter.installRevision(revision: revision),
+          ),
+          throwsA(exception),
+        );
+        verify(
+          () => git.clone(
+            url: QuickPatchFlutter.flutterGitUrl,
+            outputDirectory: p.join(flutterDirectory.parent.path, revision),
+            args: ['--filter=tree:0', '--no-checkout'],
+          ),
+        ).called(1);
+        verify(
+          () => git.checkout(
+            directory: p.join(flutterDirectory.parent.path, revision),
+            revision: revision,
+          ),
+        ).called(1);
+        verify(
+          () => logger.progress('Installing Flutter 3.10.6 (test-revis)'),
+        ).called(1);
+        verify(
+          () => progress.fail('Failed to install Flutter 3.10.6 (test-revis)'),
+        ).called(1);
+      });
+
+      group('when precache throws', () {
+        setUp(() {
+          when(
+            () => process.run(
+              'flutter',
+              any(that: contains('precache')),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenThrow(Exception('oh no!'));
+        });
+
+        test(
+          'throws CacheCorruptedException directing to quickpatch cache clean',
+          () async {
+            await expectLater(
+              runWithOverrides(
+                () => quickpatchFlutter.installRevision(revision: revision),
+              ),
+              throwsA(
+                isA<CacheCorruptedException>().having(
+                  (e) => e.toString(),
+                  'toString',
+                  contains('quickpatch cache clean'),
+                ),
+              ),
+            );
+            verify(
+              () => progress.fail('Failed to precache Flutter 3.10.6'),
+            ).called(1);
+          },
+        );
+      });
+
+      group('when precache exits with a non-zero code', () {
+        setUp(() {
+          when(() => precacheProcessResult.exitCode).thenReturn(1);
+          when(() => precacheProcessResult.stderr).thenReturn('boom');
+        });
+
+        test(
+          'throws CacheCorruptedException directing to quickpatch cache clean',
+          () async {
+            await expectLater(
+              runWithOverrides(
+                () => quickpatchFlutter.installRevision(revision: revision),
+              ),
+              throwsA(
+                isA<CacheCorruptedException>().having(
+                  (e) => e.toString(),
+                  'toString',
+                  contains('quickpatch cache clean'),
+                ),
+              ),
+            );
+            verify(
+              () => progress.fail('Failed to precache Flutter 3.10.6'),
+            ).called(1);
+          },
+        );
+      });
+
+      group('when clone and checkout succeed', () {
+        test('completes successfully', () async {
+          await expectLater(
+            runWithOverrides(
+              () => quickpatchFlutter.installRevision(revision: revision),
+            ),
+            completes,
+          );
+          verify(
+            () => process.run(
+              'flutter',
+              [
+                'precache',
+                ...runWithOverrides(() => quickpatchFlutter.precacheArgs),
+              ],
+              workingDirectory: p.join(flutterDirectory.parent.path, revision),
+            ),
+          ).called(1);
+          verify(
+            () => logger.progress('Installing Flutter 3.10.6 (test-revis)'),
+          ).called(1);
+          // Once for the installation and once for the precache.
+          verify(progress.complete).called(2);
+        });
+      });
+    });
+
+    group('isPorcelain', () {
+      test('returns true when status is empty', () async {
+        await expectLater(
+          runWithOverrides(() => quickpatchFlutter.isUnmodified()),
+          completion(isTrue),
+        );
+        verify(
+          () => git.status(
+            directory: p.join(flutterDirectory.parent.path, flutterRevision),
+            args: ['--untracked-files=no', '--porcelain'],
+          ),
+        ).called(1);
+      });
+
+      test('returns false when status is not empty', () async {
+        when(
+          () => git.status(
+            directory: any(named: 'directory'),
+            args: any(named: 'args'),
+          ),
+        ).thenAnswer((_) async => 'M some/file');
+        await expectLater(
+          runWithOverrides(() => quickpatchFlutter.isUnmodified()),
+          completion(isFalse),
+        );
+        verify(
+          () => git.status(
+            directory: p.join(flutterDirectory.parent.path, flutterRevision),
+            args: ['--untracked-files=no', '--porcelain'],
+          ),
+        ).called(1);
+      });
+
+      test(
+        'throws ProcessException when git command exits non-zero code',
+        () async {
+          const errorMessage = 'oh no!';
+          when(
+            () => git.status(
+              directory: any(named: 'directory'),
+              args: any(named: 'args'),
+            ),
+          ).thenThrow(
+            ProcessException(
+              'git',
+              ['status'],
+              errorMessage,
+              ExitCode.software.code,
+            ),
+          );
+
+          expect(
+            runWithOverrides(() => quickpatchFlutter.isUnmodified()),
+            throwsA(
+              isA<ProcessException>().having(
+                (e) => e.message,
+                'message',
+                errorMessage,
+              ),
+            ),
+          );
+        },
+      );
+    });
+
+    group('formatVersion', () {
+      test('returns the correct formatted value', () {
+        expect(
+          runWithOverrides(
+            () => quickpatchFlutter.formatVersion(
+              version: '3.10.6',
+              revision: '771d07b2cf97cf107bae6eeedcf41bdc9db772fa',
+            ),
+          ),
+          equals('3.10.6 (771d07b2cf)'),
+        );
+      });
+
+      group('when version is null', () {
+        test('returns unknown for the version', () {
+          expect(
+            runWithOverrides(
+              () => quickpatchFlutter.formatVersion(
+                version: null,
+                revision: '771d07b2cf97cf107bae6eeedcf41bdc9db772fa',
+              ),
+            ),
+            equals('unknown (771d07b2cf)'),
+          );
+        });
+      });
+    });
+  });
+}
