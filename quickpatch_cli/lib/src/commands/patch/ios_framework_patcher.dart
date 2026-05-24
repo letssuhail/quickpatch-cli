@@ -107,7 +107,7 @@ class IosFrameworkPatcher extends Patcher with ApplePatcherMixin {
     await artifactBuilder.buildElfAotSnapshot(
       appDillPath: buildResult.kernelFile.path,
       outFilePath: _aotOutputPath,
-      genSnapshotArtifact: ShorebirdArtifact.genSnapshotIos,
+      genSnapshotArtifact: QuickPatchArtifact.genSnapshotIos,
       additionalArgs: [
         ...ApplePatcherMixin.splitDebugInfoArgs(splitDebugInfoPath),
         ...obfuscationGenSnapshotArgs,
@@ -155,7 +155,7 @@ class IosFrameworkPatcher extends Patcher with ApplePatcherMixin {
     );
 
     final aotSnapshotFile = File(
-      p.join(quickpatchEnv.getShorebirdProjectRoot()!.path, 'build', 'out.aot'),
+      p.join(quickpatchEnv.getQuickPatchProjectRoot()!.path, 'build', 'out.aot'),
     );
     // TODO(eseidel): Drop support for builds before the linker.
     final useLinker = AotTools.usesLinker(quickpatchEnv.flutterRevision);
@@ -195,7 +195,7 @@ class IosFrameworkPatcher extends Patcher with ApplePatcherMixin {
     if (await aotTools.isGeneratePatchDiffBaseSupported()) {
       final patchBaseProgress = logger.progress('Generating patch diff base');
       final analyzeSnapshotPath = quickpatchArtifacts.getArtifactPath(
-        artifact: ShorebirdArtifact.analyzeSnapshotIos,
+        artifact: QuickPatchArtifact.analyzeSnapshotIos,
       );
 
       final File patchBaseFile;

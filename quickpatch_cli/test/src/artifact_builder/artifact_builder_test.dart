@@ -137,7 +137,7 @@ void main() {
         () => quickpatchEnv.buildDirectory,
       ).thenReturn(Directory(p.join(projectRoot.path, 'build')));
 
-      when(quickpatchEnv.getShorebirdProjectRoot).thenReturn(projectRoot);
+      when(quickpatchEnv.getQuickPatchProjectRoot).thenReturn(projectRoot);
 
       builder = ArtifactBuilder();
     });
@@ -1967,7 +1967,7 @@ Reason: Exited with code 70.'''),
         setUp(() {
           when(
             () => quickpatchArtifacts.getArtifactPath(
-              artifact: ShorebirdArtifact.genSnapshotIos,
+              artifact: QuickPatchArtifact.genSnapshotIos,
             ),
           ).thenReturn('gen_snapshot');
         });
@@ -1977,7 +1977,7 @@ Reason: Exited with code 70.'''),
             () => builder.buildElfAotSnapshot(
               appDillPath: '/app/dill/path',
               outFilePath: '/path/to/out',
-              genSnapshotArtifact: ShorebirdArtifact.genSnapshotIos,
+              genSnapshotArtifact: QuickPatchArtifact.genSnapshotIos,
               additionalArgs: ['--foo', 'bar'],
             ),
           );
@@ -2017,7 +2017,7 @@ Reason: Exited with code 70.'''),
                 () => builder.buildElfAotSnapshot(
                   appDillPath: 'asdf',
                   outFilePath: 'asdf',
-                  genSnapshotArtifact: ShorebirdArtifact.genSnapshotIos,
+                  genSnapshotArtifact: QuickPatchArtifact.genSnapshotIos,
                 ),
               ),
               throwsA(isA<ArtifactBuildException>()),
@@ -2031,7 +2031,7 @@ Reason: Exited with code 70.'''),
               () => builder.buildElfAotSnapshot(
                 appDillPath: '/app/dill/path',
                 outFilePath: '/path/to/out',
-                genSnapshotArtifact: ShorebirdArtifact.genSnapshotIos,
+                genSnapshotArtifact: QuickPatchArtifact.genSnapshotIos,
               ),
             );
 

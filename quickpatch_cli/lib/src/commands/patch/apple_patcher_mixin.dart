@@ -49,7 +49,7 @@ mixin ApplePatcherMixin on Patcher {
   Future<void> assertPreconditions() async {
     try {
       await quickpatchValidator.validatePreconditions(
-        checkShorebirdInitialized: true,
+        checkQuickPatchInitialized: true,
         checkUserIsAuthenticated: true,
         validators: applePlatformValidators,
         supportedOperatingSystems: {Platform.macOS},

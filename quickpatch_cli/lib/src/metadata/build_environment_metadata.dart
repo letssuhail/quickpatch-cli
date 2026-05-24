@@ -23,7 +23,7 @@ class BuildEnvironmentMetadata extends Equatable {
     required this.operatingSystem,
     required this.operatingSystemVersion,
     required this.quickpatchYaml,
-    required this.usesShorebirdCodePushPackage,
+    required this.usesQuickPatchCodePushPackage,
     this.xcodeVersion,
   });
 
@@ -36,7 +36,7 @@ class BuildEnvironmentMetadata extends Equatable {
     String operatingSystem = 'macos',
     String operatingSystemVersion = '1.2.3',
     QuickPatchYaml quickpatchYaml = const QuickPatchYaml(appId: '123'),
-    bool usesShorebirdCodePushPackage = false,
+    bool usesQuickPatchCodePushPackage = false,
     String? xcodeVersion = '15.0',
   }) => BuildEnvironmentMetadata(
     flutterRevision: flutterRevision,
@@ -44,7 +44,7 @@ class BuildEnvironmentMetadata extends Equatable {
     operatingSystem: operatingSystem,
     operatingSystemVersion: operatingSystemVersion,
     quickpatchYaml: quickpatchYaml,
-    usesShorebirdCodePushPackage: usesShorebirdCodePushPackage,
+    usesQuickPatchCodePushPackage: usesQuickPatchCodePushPackage,
     xcodeVersion: xcodeVersion,
   );
   // coverage:ignore-end
@@ -64,7 +64,7 @@ class BuildEnvironmentMetadata extends Equatable {
     String? operatingSystem,
     String? operatingSystemVersion,
     QuickPatchYaml? quickpatchYaml,
-    bool? usesShorebirdCodePushPackage,
+    bool? usesQuickPatchCodePushPackage,
     String? xcodeVersion,
   }) => BuildEnvironmentMetadata(
     flutterRevision: flutterRevision ?? this.flutterRevision,
@@ -73,8 +73,8 @@ class BuildEnvironmentMetadata extends Equatable {
     operatingSystemVersion:
         operatingSystemVersion ?? this.operatingSystemVersion,
     quickpatchYaml: quickpatchYaml ?? this.quickpatchYaml,
-    usesShorebirdCodePushPackage:
-        usesShorebirdCodePushPackage ?? this.usesShorebirdCodePushPackage,
+    usesQuickPatchCodePushPackage:
+        usesQuickPatchCodePushPackage ?? this.usesQuickPatchCodePushPackage,
     xcodeVersion: xcodeVersion ?? this.xcodeVersion,
   );
 
@@ -109,7 +109,7 @@ class BuildEnvironmentMetadata extends Equatable {
   ///
   /// Reason: this helps us understand which projects are using the QuickPatch
   /// CodePush package and better support customers who encounter issues.
-  final bool usesShorebirdCodePushPackage;
+  final bool usesQuickPatchCodePushPackage;
 
   /// The version of Xcode used to build the patch. Only provided for iOS
   /// patches.
@@ -125,7 +125,7 @@ class BuildEnvironmentMetadata extends Equatable {
     operatingSystem,
     operatingSystemVersion,
     quickpatchYaml,
-    usesShorebirdCodePushPackage,
+    usesQuickPatchCodePushPackage,
     xcodeVersion,
   ];
 }

@@ -103,7 +103,7 @@ void main() {
       when(() => logger.progress(any())).thenReturn(progress);
 
       when(
-        () => quickpatchEnv.getShorebirdProjectRoot(),
+        () => quickpatchEnv.getQuickPatchProjectRoot(),
       ).thenReturn(projectRoot);
 
       iosFrameworkReleaser = IosFrameworkReleaser(
@@ -227,8 +227,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
               supportedOperatingSystems: any(
@@ -253,8 +253,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
               supportedOperatingSystems: any(
@@ -272,7 +272,7 @@ void main() {
           verify(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: true,
-              checkShorebirdInitialized: true,
+              checkQuickPatchInitialized: true,
               validators: [flavorValidator],
               supportedOperatingSystems: {Platform.macOS},
             ),
@@ -285,8 +285,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
               supportedOperatingSystems: any(
@@ -658,7 +658,7 @@ void main() {
           operatingSystemVersion: operatingSystemVersion,
           quickpatchVersion: packageVersion,
           quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-          usesShorebirdCodePushPackage: false,
+          usesQuickPatchCodePushPackage: false,
         ),
       );
 
@@ -682,7 +682,7 @@ void main() {
                 operatingSystemVersion: operatingSystemVersion,
                 quickpatchVersion: packageVersion,
                 quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-                usesShorebirdCodePushPackage: false,
+                usesQuickPatchCodePushPackage: false,
                 xcodeVersion: xcodeVersion,
               ),
             ),

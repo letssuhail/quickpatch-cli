@@ -48,7 +48,7 @@ class WindowsPatcher extends Patcher {
     try {
       await quickpatchValidator.validatePreconditions(
         checkUserIsAuthenticated: true,
-        checkShorebirdInitialized: true,
+        checkQuickPatchInitialized: true,
         validators: doctor.windowsCommandValidators,
         supportedOperatingSystems: {Platform.windows},
       );

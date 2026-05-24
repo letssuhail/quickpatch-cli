@@ -149,8 +149,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
               supportedOperatingSystems: any(
@@ -175,8 +175,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
               supportedOperatingSystems: any(
@@ -194,7 +194,7 @@ void main() {
           verify(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: true,
-              checkShorebirdInitialized: true,
+              checkQuickPatchInitialized: true,
               validators: [flavorValidator],
               supportedOperatingSystems: {Platform.macOS},
             ),
@@ -207,8 +207,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
               supportedOperatingSystems: any(
@@ -369,7 +369,7 @@ $body
         when(() => argResults.wasParsed('obfuscate')).thenReturn(true);
         when(() => quickpatchEnv.flutterRevision).thenReturn('deadbeef');
         when(
-          () => quickpatchEnv.getShorebirdProjectRoot(),
+          () => quickpatchEnv.getQuickPatchProjectRoot(),
         ).thenReturn(projectRoot);
       });
 
@@ -429,7 +429,7 @@ $body
         ).thenReturn(base64PublicKey);
 
         when(
-          () => quickpatchEnv.getShorebirdProjectRoot(),
+          () => quickpatchEnv.getQuickPatchProjectRoot(),
         ).thenReturn(projectRoot);
         when(
           () => quickpatchFlutter.getVersionAndRevision(),
@@ -961,7 +961,7 @@ $body
       setUp(() {
         when(() => argResults['codesign']).thenReturn(codesign);
         when(
-          () => quickpatchEnv.getShorebirdProjectRoot(),
+          () => quickpatchEnv.getQuickPatchProjectRoot(),
         ).thenReturn(projectRoot);
 
         xcarchiveDirectory = Directory.systemTemp.createTempSync();
@@ -1068,7 +1068,7 @@ $body
           operatingSystemVersion: operatingSystemVersion,
           quickpatchVersion: packageVersion,
           quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-          usesShorebirdCodePushPackage: true,
+          usesQuickPatchCodePushPackage: true,
         ),
       );
 
@@ -1090,7 +1090,7 @@ $body
                 operatingSystemVersion: operatingSystemVersion,
                 quickpatchVersion: packageVersion,
                 quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-                usesShorebirdCodePushPackage: true,
+                usesQuickPatchCodePushPackage: true,
                 xcodeVersion: xcodeVersion,
               ),
             ),

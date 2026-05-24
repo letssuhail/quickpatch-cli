@@ -12,7 +12,7 @@ import 'package:quickpatch_cli/src/quickpatch_validator.dart';
 /// `quickpatch create`
 /// Create a new Flutter app with QuickPatch.
 /// {@endtemplate}
-class CreateCommand extends ShorebirdProxyCommand {
+class CreateCommand extends QuickPatchProxyCommand {
   @override
   String get name => 'create';
 

@@ -58,7 +58,7 @@ class AarReleaser extends Releaser {
     try {
       await quickpatchValidator.validatePreconditions(
         checkUserIsAuthenticated: true,
-        checkShorebirdInitialized: true,
+        checkQuickPatchInitialized: true,
       );
     } on PreconditionFailedException catch (e) {
       throw ProcessExit(e.exitCode.code);
@@ -100,7 +100,7 @@ class AarReleaser extends Releaser {
       QuickPatchAndroidArtifacts.aarLibraryPath,
     );
     final targetLibraryDirectory = Directory(
-      p.join(quickpatchEnv.getShorebirdProjectRoot()!.path, 'release'),
+      p.join(quickpatchEnv.getQuickPatchProjectRoot()!.path, 'release'),
     );
     await copyPath(sourceLibraryDirectory.path, targetLibraryDirectory.path);
 
@@ -145,7 +145,7 @@ class AarReleaser extends Releaser {
   @override
   String get postReleaseInstructions {
     final targetLibraryDirectory = Directory(
-      p.join(quickpatchEnv.getShorebirdProjectRoot()!.path, 'release'),
+      p.join(quickpatchEnv.getQuickPatchProjectRoot()!.path, 'release'),
     );
 
     return '''
@@ -163,7 +163,7 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
 +       maven {
-+           url '../${p.basename(quickpatchEnv.getShorebirdProjectRoot()!.path)}/${p.relative(targetLibraryDirectory.path)}'
++           url '../${p.basename(quickpatchEnv.getQuickPatchProjectRoot()!.path)}/${p.relative(targetLibraryDirectory.path)}'
 +       }
 +       maven {
 -           url 'https://storage.googleapis.com/download.flutter.io'

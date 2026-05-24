@@ -22,7 +22,7 @@ mixin AppleReleaserMixin on Releaser {
     try {
       await quickpatchValidator.validatePreconditions(
         checkUserIsAuthenticated: true,
-        checkShorebirdInitialized: true,
+        checkQuickPatchInitialized: true,
         validators: applePlatformValidators,
         supportedOperatingSystems: {Platform.macOS},
       );

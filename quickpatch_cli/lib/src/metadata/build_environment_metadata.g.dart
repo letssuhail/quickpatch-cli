@@ -29,7 +29,7 @@ BuildEnvironmentMetadata _$BuildEnvironmentMetadataFromJson(
         'quickpatch_yaml',
         (v) => QuickPatchYaml.fromJson(v as Map<String, dynamic>),
       ),
-      usesShorebirdCodePushPackage: $checkedConvert(
+      usesQuickPatchCodePushPackage: $checkedConvert(
         'uses_quickpatch_code_push_package',
         (v) => v as bool,
       ),
@@ -43,7 +43,7 @@ BuildEnvironmentMetadata _$BuildEnvironmentMetadataFromJson(
     'operatingSystem': 'operating_system',
     'operatingSystemVersion': 'operating_system_version',
     'quickpatchYaml': 'quickpatch_yaml',
-    'usesShorebirdCodePushPackage': 'uses_quickpatch_code_push_package',
+    'usesQuickPatchCodePushPackage': 'uses_quickpatch_code_push_package',
     'xcodeVersion': 'xcode_version',
   },
 );
@@ -56,6 +56,6 @@ Map<String, dynamic> _$BuildEnvironmentMetadataToJson(
   'operating_system': instance.operatingSystem,
   'operating_system_version': instance.operatingSystemVersion,
   'quickpatch_yaml': instance.quickpatchYaml.toJson(),
-  'uses_quickpatch_code_push_package': instance.usesShorebirdCodePushPackage,
+  'uses_quickpatch_code_push_package': instance.usesQuickPatchCodePushPackage,
   'xcode_version': instance.xcodeVersion,
 };

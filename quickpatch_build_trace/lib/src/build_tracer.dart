@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:quickpatch_build_trace/src/build_trace_event.dart';
 
-/// Shorebird convention: all events from one producer share a single pid
+/// QuickPatch convention: all events from one producer share a single pid
 /// (the OS pid of the producing process), plus `process_name` metadata
 /// naming it. Callers pick their own tid numbering within their pid.
 ///
@@ -144,7 +144,7 @@ class BuildTracer {
 
   /// Emits a flow-start event (`ph: "s"`) tying the enclosing span at
   /// ([pid], [tid], [at]) to a flow-end event a spawned child will
-  /// emit with the same [id]. Shorebird convention uses the child's pid
+  /// emit with the same [id]. QuickPatch convention uses the child's pid
   /// as the flow id so spawner and spawnee agree on the id without
   /// passing it through env vars.
   void addFlowStart({

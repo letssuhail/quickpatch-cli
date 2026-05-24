@@ -1,6 +1,6 @@
 name: quickpatch_build_trace
 description: >
-  Chrome Trace Event Format producer used by Shorebird's build-trace
+  Chrome Trace Event Format producer used by QuickPatch's build-trace
   plumbing across flutter_tools, dart-sdk's aot_tools, and quickpatch_cli.
   Not intended for consumption outside of those projects.
 version: 0.1.0

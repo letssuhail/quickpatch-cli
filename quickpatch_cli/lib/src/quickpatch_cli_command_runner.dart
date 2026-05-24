@@ -148,8 +148,8 @@ class QuickPatchCliCommandRunner extends CompletionCommandRunner<int> {
 
       final process = QuickPatchProcess();
       final quickpatchArtifacts = engineConfig.localEngineSrcPath != null
-          ? const ShorebirdLocalEngineArtifacts()
-          : const ShorebirdCachedArtifacts();
+          ? const QuickPatchLocalEngineArtifacts()
+          : const QuickPatchCachedArtifacts();
       // Suppress ANSI escape codes when the user has opted into a
       // non-interactive output mode. When stdout/stderr aren't TTYs the io
       // package already disables ANSI automatically.

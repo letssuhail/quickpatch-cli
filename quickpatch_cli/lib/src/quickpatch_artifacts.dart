@@ -10,7 +10,7 @@ import 'package:quickpatch_cli/src/engine_config.dart';
 import 'package:quickpatch_cli/src/quickpatch_env.dart';
 
 /// All QuickPatch artifacts used explicitly by QuickPatch.
-enum ShorebirdArtifact {
+enum QuickPatchArtifact {
   /// The iOS analyze_snapshot executable.
   analyzeSnapshotIos,
 
@@ -32,7 +32,7 @@ enum ShorebirdArtifact {
 
 /// A reference to a [QuickPatchArtifacts] instance.
 final quickpatchArtifactsRef = create<QuickPatchArtifacts>(
-  ShorebirdCachedArtifacts.new,
+  QuickPatchCachedArtifacts.new,
 );
 
 /// The [QuickPatchArtifacts] instance available in the current zone.
@@ -43,30 +43,30 @@ QuickPatchArtifacts get quickpatchArtifacts => read(quickpatchArtifactsRef);
 /// {@endtemplate}
 abstract class QuickPatchArtifacts {
   /// Returns the path to the given [artifact].
-  String getArtifactPath({required ShorebirdArtifact artifact});
+  String getArtifactPath({required QuickPatchArtifact artifact});
 }
 
 /// {@template quickpatch_cached_artifacts}
 /// A class that provides access to cached QuickPatch artifacts.
 /// {@endtemplate}
-class ShorebirdCachedArtifacts implements QuickPatchArtifacts {
+class QuickPatchCachedArtifacts implements QuickPatchArtifacts {
   /// {@macro quickpatch_cached_artifacts}
-  const ShorebirdCachedArtifacts();
+  const QuickPatchCachedArtifacts();
 
   @override
-  String getArtifactPath({required ShorebirdArtifact artifact}) {
+  String getArtifactPath({required QuickPatchArtifact artifact}) {
     switch (artifact) {
-      case ShorebirdArtifact.analyzeSnapshotIos:
+      case QuickPatchArtifact.analyzeSnapshotIos:
         return _analyzeSnapshotIosFile.path;
-      case ShorebirdArtifact.analyzeSnapshotMacOS:
+      case QuickPatchArtifact.analyzeSnapshotMacOS:
         return _analyzeSnapshotMacosFile.path;
-      case ShorebirdArtifact.aotTools:
+      case QuickPatchArtifact.aotTools:
         return _aotToolsFile.path;
-      case ShorebirdArtifact.genSnapshotIos:
+      case QuickPatchArtifact.genSnapshotIos:
         return _genSnapshotIosFile.path;
-      case ShorebirdArtifact.genSnapshotMacosArm64:
+      case QuickPatchArtifact.genSnapshotMacosArm64:
         return _genSnapshotMacOsArm64File.path;
-      case ShorebirdArtifact.genSnapshotMacosX64:
+      case QuickPatchArtifact.genSnapshotMacosX64:
         return _genSnapshotMacOsX64File.path;
     }
   }
@@ -169,24 +169,24 @@ class ShorebirdCachedArtifacts implements QuickPatchArtifacts {
 /// {@template quickpatch_local_engine_artifacts}
 /// A class that provides access to locally built QuickPatch artifacts.
 /// {@endtemplate}
-class ShorebirdLocalEngineArtifacts implements QuickPatchArtifacts {
+class QuickPatchLocalEngineArtifacts implements QuickPatchArtifacts {
   /// {@macro quickpatch_local_engine_artifacts}
-  const ShorebirdLocalEngineArtifacts();
+  const QuickPatchLocalEngineArtifacts();
 
   @override
-  String getArtifactPath({required ShorebirdArtifact artifact}) {
+  String getArtifactPath({required QuickPatchArtifact artifact}) {
     switch (artifact) {
-      case ShorebirdArtifact.analyzeSnapshotIos:
+      case QuickPatchArtifact.analyzeSnapshotIos:
         return _analyzeSnapshotIosFile.path;
-      case ShorebirdArtifact.analyzeSnapshotMacOS:
+      case QuickPatchArtifact.analyzeSnapshotMacOS:
         return _analyzeSnapshotMacosFile.path;
-      case ShorebirdArtifact.aotTools:
+      case QuickPatchArtifact.aotTools:
         return _aotToolsFile.path;
-      case ShorebirdArtifact.genSnapshotIos:
+      case QuickPatchArtifact.genSnapshotIos:
         return _genSnapshotIosFile.path;
-      case ShorebirdArtifact.genSnapshotMacosArm64:
+      case QuickPatchArtifact.genSnapshotMacosArm64:
         return _genSnapshotMacosArm64File.path;
-      case ShorebirdArtifact.genSnapshotMacosX64:
+      case QuickPatchArtifact.genSnapshotMacosX64:
         return _genSnapshotMacosX64File.path;
     }
   }

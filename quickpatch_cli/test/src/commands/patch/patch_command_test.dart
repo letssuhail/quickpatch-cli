@@ -336,7 +336,7 @@ void main() {
         return quickpatchEnv;
       });
       when(() => quickpatchEnv.canAcceptUserInput).thenReturn(true);
-      when(() => quickpatchEnv.usesShorebirdCodePushPackage).thenReturn(false);
+      when(() => quickpatchEnv.usesQuickPatchCodePushPackage).thenReturn(false);
 
       when(
         () => quickpatchFlutter.getVersionAndRevision(),

@@ -21,7 +21,7 @@ void main() {
           operatingSystemVersion: '1.2.3',
           quickpatchVersion: '4.5.6',
           quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-          usesShorebirdCodePushPackage: false,
+          usesQuickPatchCodePushPackage: false,
           xcodeVersion: '15.0',
         ),
       );
@@ -48,7 +48,7 @@ void main() {
             operatingSystemVersion: '1.2.3',
             quickpatchVersion: '4.5.6',
             quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-            usesShorebirdCodePushPackage: false,
+            usesQuickPatchCodePushPackage: false,
             xcodeVersion: '15.0',
           ),
         );
@@ -72,7 +72,7 @@ void main() {
             operatingSystemVersion: '1.2.3',
             quickpatchVersion: '4.5.6',
             quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-            usesShorebirdCodePushPackage: false,
+            usesQuickPatchCodePushPackage: false,
             xcodeVersion: '15.0',
           ),
         );
@@ -90,7 +90,7 @@ void main() {
             operatingSystemVersion: '11',
             quickpatchVersion: '1.2.3',
             quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-            usesShorebirdCodePushPackage: false,
+            usesQuickPatchCodePushPackage: false,
             xcodeVersion: '14.0',
           ),
         );
@@ -113,7 +113,7 @@ void main() {
                 operatingSystemVersion: '11',
                 quickpatchVersion: '1.2.3',
                 quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-                usesShorebirdCodePushPackage: false,
+                usesQuickPatchCodePushPackage: false,
                 xcodeVersion: '14.0',
               ),
             ),
@@ -139,7 +139,7 @@ void main() {
             operatingSystemVersion: '1.2.3',
             quickpatchVersion: '4.5.6',
             xcodeVersion: '15.0',
-            usesShorebirdCodePushPackage: false,
+            usesQuickPatchCodePushPackage: false,
             quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
           ),
         );
@@ -158,7 +158,7 @@ void main() {
             operatingSystemVersion: '1.2.3',
             quickpatchVersion: '4.5.6',
             quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-            usesShorebirdCodePushPackage: false,
+            usesQuickPatchCodePushPackage: false,
             xcodeVersion: '15.0',
           ),
         );
@@ -180,7 +180,7 @@ void main() {
             operatingSystemVersion: '1.2.3',
             quickpatchVersion: '4.5.6',
             quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-            usesShorebirdCodePushPackage: false,
+            usesQuickPatchCodePushPackage: false,
             xcodeVersion: '15.0',
           ),
         );
@@ -198,7 +198,7 @@ void main() {
             operatingSystemVersion: '1.2.3',
             quickpatchVersion: '4.5.6',
             quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-            usesShorebirdCodePushPackage: false,
+            usesQuickPatchCodePushPackage: false,
             xcodeVersion: '15.0',
           ),
         );

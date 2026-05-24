@@ -51,7 +51,7 @@ class AarPatcher extends Patcher {
     try {
       await quickpatchValidator.validatePreconditions(
         checkUserIsAuthenticated: true,
-        checkShorebirdInitialized: true,
+        checkQuickPatchInitialized: true,
       );
     } on PreconditionFailedException catch (e) {
       throw ProcessExit(e.exitCode.code);

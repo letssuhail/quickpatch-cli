@@ -95,7 +95,7 @@ void main() {
       registerFallbackValue(Directory(''));
       registerFallbackValue(File(''));
       registerFallbackValue(ReleasePlatform.macos);
-      registerFallbackValue(ShorebirdArtifact.genSnapshotMacosArm64);
+      registerFallbackValue(QuickPatchArtifact.genSnapshotMacosArm64);
       registerFallbackValue(Uri.parse('https://example.com'));
     });
 
@@ -144,7 +144,7 @@ void main() {
       when(() => logger.progress(any())).thenReturn(progress);
 
       when(
-        () => quickpatchEnv.getShorebirdProjectRoot(),
+        () => quickpatchEnv.getQuickPatchProjectRoot(),
       ).thenReturn(projectRoot);
       when(
         () => quickpatchEnv.buildDirectory,
@@ -208,8 +208,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
               supportedOperatingSystems: any(
@@ -233,8 +233,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
             ),
@@ -246,8 +246,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
               supportedOperatingSystems: any(
@@ -262,7 +262,7 @@ void main() {
           verify(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: true,
-              checkShorebirdInitialized: true,
+              checkQuickPatchInitialized: true,
               validators: [flavorValidator],
               supportedOperatingSystems: {Platform.macOS},
             ),
@@ -509,8 +509,8 @@ This may indicate that the patch contains native changes, which cannot be applie
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
               supportedOperatingSystems: any(
@@ -1267,7 +1267,7 @@ For more information see: ${supportedFlutterVersionsUrl.toLink()}'''),
             operatingSystemVersion: operatingSystemVersion,
             quickpatchVersion: packageVersion,
             quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-            usesShorebirdCodePushPackage: false,
+            usesQuickPatchCodePushPackage: false,
           ),
         );
 
@@ -1289,7 +1289,7 @@ For more information see: ${supportedFlutterVersionsUrl.toLink()}'''),
                 quickpatchVersion: packageVersion,
                 xcodeVersion: xcodeVersion,
                 quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-                usesShorebirdCodePushPackage: false,
+                usesQuickPatchCodePushPackage: false,
               ),
             ),
           ),

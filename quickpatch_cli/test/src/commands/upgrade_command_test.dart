@@ -11,8 +11,8 @@ import 'package:test/test.dart';
 import '../mocks.dart';
 
 void main() {
-  const currentShorebirdRevision = 'revision-1';
-  const newerShorebirdRevision = 'revision-2';
+  const currentQuickPatchRevision = 'revision-1';
+  const newerQuickPatchRevision = 'revision-2';
 
   group('upgrade', () {
     late QuickPatchLogger logger;
@@ -39,10 +39,10 @@ void main() {
 
       when(
         quickpatchVersion.fetchCurrentGitHash,
-      ).thenAnswer((_) async => currentShorebirdRevision);
+      ).thenAnswer((_) async => currentQuickPatchRevision);
       when(
         quickpatchVersion.fetchLatestGitHash,
-      ).thenAnswer((_) async => newerShorebirdRevision);
+      ).thenAnswer((_) async => newerQuickPatchRevision);
       when(
         () => quickpatchVersion.attemptReset(revision: any(named: 'revision')),
       ).thenAnswer((_) async => {});
@@ -113,14 +113,14 @@ void main() {
     test('does not update when already on latest version', () async {
       when(
         quickpatchVersion.fetchLatestGitHash,
-      ).thenAnswer((_) async => currentShorebirdRevision);
+      ).thenAnswer((_) async => currentQuickPatchRevision);
       when(() => logger.progress(any())).thenReturn(MockProgress());
 
       final result = await runWithOverrides(command.run);
 
       expect(result, equals(ExitCode.success.code));
       verify(
-        () => logger.info('Shorebird is already at the latest version.'),
+        () => logger.info('QuickPatch is already at the latest version.'),
       ).called(1);
     });
   });

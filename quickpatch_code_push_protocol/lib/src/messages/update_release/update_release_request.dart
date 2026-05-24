@@ -44,7 +44,7 @@ class UpdateReleaseRequest {
   /// The status of a release.
   final ReleaseStatus? status;
 
-  /// A platform to which a Shorebird release can be deployed.
+  /// A platform to which a QuickPatch release can be deployed.
   final ReleasePlatform? platform;
 
   /// Additional information about the command that was run to

@@ -135,7 +135,7 @@ For more information see: ${supportedFlutterVersionsUrl.toLink()}''');
     await artifactBuilder.buildElfAotSnapshot(
       appDillPath: ipaBuildResult.kernelFile.path,
       outFilePath: _aotOutputPath,
-      genSnapshotArtifact: ShorebirdArtifact.genSnapshotIos,
+      genSnapshotArtifact: QuickPatchArtifact.genSnapshotIos,
       additionalArgs: [
         ...ApplePatcherMixin.splitDebugInfoArgs(splitDebugInfoPath),
         ...obfuscationGenSnapshotArgs,
@@ -228,7 +228,7 @@ For more information see: ${supportedFlutterVersionsUrl.toLink()}''');
     if (useLinker && await aotTools.isGeneratePatchDiffBaseSupported()) {
       final patchBaseProgress = logger.progress('Generating patch diff base');
       final analyzeSnapshotPath = quickpatchArtifacts.getArtifactPath(
-        artifact: ShorebirdArtifact.analyzeSnapshotIos,
+        artifact: QuickPatchArtifact.analyzeSnapshotIos,
       );
 
       final File patchBaseFile;

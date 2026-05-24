@@ -424,12 +424,12 @@ Otherwise, to repair macos, run "flutter create . --platforms macos"''',
 
         when(
           () => quickpatchArtifacts.getArtifactPath(
-            artifact: ShorebirdArtifact.analyzeSnapshotIos,
+            artifact: QuickPatchArtifact.analyzeSnapshotIos,
           ),
         ).thenReturn(analyzeSnapshotFile.path);
         when(
           () => quickpatchArtifacts.getArtifactPath(
-            artifact: ShorebirdArtifact.genSnapshotIos,
+            artifact: QuickPatchArtifact.genSnapshotIos,
           ),
         ).thenReturn(genSnapshotFile.path);
 
@@ -479,7 +479,7 @@ Otherwise, to repair macos, run "flutter create . --platforms macos"''',
         setUp(() {
           when(
             () => quickpatchArtifacts.getArtifactPath(
-              artifact: ShorebirdArtifact.analyzeSnapshotIos,
+              artifact: QuickPatchArtifact.analyzeSnapshotIos,
             ),
           ).thenReturn('');
         });

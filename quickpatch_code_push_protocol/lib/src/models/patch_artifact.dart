@@ -54,7 +54,7 @@ class PatchArtifact {
   /// The arch of the artifact.
   final String arch;
 
-  /// A platform to which a Shorebird release can be deployed.
+  /// A platform to which a QuickPatch release can be deployed.
   final ReleasePlatform platform;
 
   /// The hash of the artifact.

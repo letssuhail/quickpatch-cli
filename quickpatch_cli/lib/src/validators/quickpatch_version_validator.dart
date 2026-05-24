@@ -13,10 +13,10 @@ class QuickPatchVersionValidator extends Validator {
 
   @override
   Future<List<ValidationIssue>> validate() async {
-    final bool isShorebirdUpToDate;
+    final bool isQuickPatchUpToDate;
 
     try {
-      isShorebirdUpToDate = await quickpatchVersion.isLatest();
+      isQuickPatchUpToDate = await quickpatchVersion.isLatest();
     } on ProcessException catch (e) {
       return [
         ValidationIssue(
@@ -26,7 +26,7 @@ class QuickPatchVersionValidator extends Validator {
       ];
     }
 
-    if (!isShorebirdUpToDate) {
+    if (!isQuickPatchUpToDate) {
       return [
         const ValidationIssue(
           severity: ValidationIssueSeverity.warning,

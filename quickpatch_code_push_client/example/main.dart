@@ -9,9 +9,9 @@ Future<void> main() async {
   // Get the list of organization memberships for the current user.
   final memberships = await client.getOrganizationMemberships();
 
-  // Create a new Shorebird application.
+  // Create a new QuickPatch application.
   final app = await client.createApp(
-    displayName: '<DISPLAY NAME>', // e.g. 'Shorebird Example'
+    displayName: '<DISPLAY NAME>', // e.g. 'QuickPatch Example'
     organizationId: memberships.first.organization.id,
   );
 

@@ -61,7 +61,7 @@ To change the version of this release, change your app's version in your pubspec
     try {
       await quickpatchValidator.validatePreconditions(
         checkUserIsAuthenticated: true,
-        checkShorebirdInitialized: true,
+        checkQuickPatchInitialized: true,
         validators: doctor.linuxCommandValidators,
         supportedOperatingSystems: {Platform.linux},
       );

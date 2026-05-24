@@ -1,4 +1,4 @@
-/// A platform to which a Shorebird release can be deployed.
+/// A platform to which a QuickPatch release can be deployed.
 enum ReleasePlatform {
   /// Android.
   android._('android'),

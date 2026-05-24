@@ -62,7 +62,7 @@ void main() {
       when(() => quickpatchEnv.dartBinaryFile).thenReturn(dartBinaryFile);
       when(
         () => quickpatchArtifacts.getArtifactPath(
-          artifact: ShorebirdArtifact.aotTools,
+          artifact: QuickPatchArtifact.aotTools,
         ),
       ).thenReturn('aot-tools.dill');
     });
@@ -79,7 +79,7 @@ void main() {
       test('throws exception when process exits with non-zero code', () async {
         when(
           () => quickpatchArtifacts.getArtifactPath(
-            artifact: ShorebirdArtifact.aotTools,
+            artifact: QuickPatchArtifact.aotTools,
           ),
         ).thenReturn('aot-tools.dill');
         when(
@@ -142,7 +142,7 @@ stderr: error'''),
         setUp(() {
           when(
             () => quickpatchArtifacts.getArtifactPath(
-              artifact: ShorebirdArtifact.aotTools,
+              artifact: QuickPatchArtifact.aotTools,
             ),
           ).thenReturn(aotToolsPath);
         });
@@ -310,7 +310,7 @@ stderr: error'''),
         setUp(() {
           when(
             () => quickpatchArtifacts.getArtifactPath(
-              artifact: ShorebirdArtifact.aotTools,
+              artifact: QuickPatchArtifact.aotTools,
             ),
           ).thenReturn(aotToolsPath);
         });
@@ -383,7 +383,7 @@ stderr: error'''),
         setUp(() {
           when(
             () => quickpatchArtifacts.getArtifactPath(
-              artifact: ShorebirdArtifact.aotTools,
+              artifact: QuickPatchArtifact.aotTools,
             ),
           ).thenReturn(aotToolsPath);
         });
@@ -454,7 +454,7 @@ stderr: error'''),
         setUp(() {
           when(
             () => quickpatchArtifacts.getArtifactPath(
-              artifact: ShorebirdArtifact.aotTools,
+              artifact: QuickPatchArtifact.aotTools,
             ),
           ).thenReturn(aotToolsPath);
         });
@@ -526,7 +526,7 @@ stderr: error'''),
         setUp(() {
           when(
             () => quickpatchArtifacts.getArtifactPath(
-              artifact: ShorebirdArtifact.aotTools,
+              artifact: QuickPatchArtifact.aotTools,
             ),
           ).thenReturn(aotToolsPath);
         });

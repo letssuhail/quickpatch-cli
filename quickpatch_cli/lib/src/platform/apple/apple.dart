@@ -164,7 +164,7 @@ class Apple {
 
     final analyzeSnapshot = File(
       quickpatchArtifacts.getArtifactPath(
-        artifact: ShorebirdArtifact.analyzeSnapshotIos,
+        artifact: QuickPatchArtifact.analyzeSnapshotIos,
       ),
     );
 
@@ -174,7 +174,7 @@ class Apple {
     }
 
     final genSnapshot = quickpatchArtifacts.getArtifactPath(
-      artifact: ShorebirdArtifact.genSnapshotIos,
+      artifact: QuickPatchArtifact.genSnapshotIos,
     );
 
     final linkProgress = logger.progress('Linking AOT files');

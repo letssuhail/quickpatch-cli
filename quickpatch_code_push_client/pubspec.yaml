@@ -1,5 +1,5 @@
 name: quickpatch_code_push_client
-description: Library which allows Dart applications to interact with the Shorebird CodePush API
+description: Library which allows Dart applications to interact with the QuickPatch CodePush API
 version: 0.9.0+1
 repository: https://github.com/letssuhail/quickpatch
 resolution: workspace

@@ -44,7 +44,7 @@ void main() {
 
       when(() => cache.updateAll()).thenAnswer((_) async {});
       when(
-        () => quickpatchEnv.getShorebirdProjectRoot(),
+        () => quickpatchEnv.getQuickPatchProjectRoot(),
       ).thenReturn(projectRoot);
 
       quickpatchAndroidArtifacts = QuickPatchAndroidArtifacts();

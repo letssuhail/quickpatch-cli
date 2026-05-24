@@ -123,7 +123,7 @@ void main() {
 
       when(() => quickpatchEnv.androidPackageName).thenReturn(packageName);
       when(
-        () => quickpatchEnv.getShorebirdProjectRoot(),
+        () => quickpatchEnv.getQuickPatchProjectRoot(),
       ).thenReturn(projectRoot);
 
       patcher = AarPatcher(
@@ -162,8 +162,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
               supportedOperatingSystems: any(
@@ -204,8 +204,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
             ),
@@ -217,8 +217,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
             ),
@@ -230,7 +230,7 @@ void main() {
           verify(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: true,
-              checkShorebirdInitialized: true,
+              checkQuickPatchInitialized: true,
             ),
           ).called(1);
         });
@@ -645,7 +645,7 @@ void main() {
             operatingSystemVersion: operatingSystemVersion,
             quickpatchVersion: packageVersion,
             quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-            usesShorebirdCodePushPackage: true,
+            usesQuickPatchCodePushPackage: true,
           ),
         );
 

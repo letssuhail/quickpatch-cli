@@ -84,7 +84,7 @@ void main() {
       when(
         () => quickpatchValidator.validatePreconditions(
           checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-          checkShorebirdInitialized: any(named: 'checkShorebirdInitialized'),
+          checkQuickPatchInitialized: any(named: 'checkQuickPatchInitialized'),
         ),
       ).thenAnswer((_) async {});
       when(
@@ -106,13 +106,13 @@ void main() {
     });
 
     group('when validation fails', () {
-      final exception = ShorebirdNotInitializedException();
+      final exception = QuickPatchNotInitializedException();
 
       setUp(() {
         when(
           () => quickpatchValidator.validatePreconditions(
             checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-            checkShorebirdInitialized: any(named: 'checkShorebirdInitialized'),
+            checkQuickPatchInitialized: any(named: 'checkQuickPatchInitialized'),
           ),
         ).thenThrow(exception);
       });
@@ -154,7 +154,7 @@ void main() {
         verify(
           () => quickpatchValidator.validatePreconditions(
             checkUserIsAuthenticated: true,
-            checkShorebirdInitialized: true,
+            checkQuickPatchInitialized: true,
           ),
         ).called(1);
       });

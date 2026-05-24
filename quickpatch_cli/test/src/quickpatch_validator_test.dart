@@ -46,7 +46,7 @@ void main() {
 
     group('PreconditionFailedException', () {
       test('have correct exit codes', () {
-        expect(ShorebirdNotInitializedException().exitCode, ExitCode.config);
+        expect(QuickPatchNotInitializedException().exitCode, ExitCode.config);
         expect(UserNotAuthorizedException().exitCode, ExitCode.noUser);
         expect(ValidationFailedException().exitCode, ExitCode.config);
         expect(
@@ -107,15 +107,15 @@ void main() {
             });
 
             test(
-              '''prints error message and throws ShorebirdNotInitializedException''',
+              '''prints error message and throws QuickPatchNotInitializedException''',
               () async {
                 await expectLater(
                   runWithOverrides(
                     () => quickpatchValidator.validatePreconditions(
-                      checkShorebirdInitialized: true,
+                      checkQuickPatchInitialized: true,
                     ),
                   ),
-                  throwsA(isA<ShorebirdNotInitializedException>()),
+                  throwsA(isA<QuickPatchNotInitializedException>()),
                 );
                 verifyInOrder([
                   () => logger.err(
@@ -139,15 +139,15 @@ void main() {
             });
 
             test(
-              '''prints error message and throws ShorebirdNotInitializedException''',
+              '''prints error message and throws QuickPatchNotInitializedException''',
               () async {
                 await expectLater(
                   runWithOverrides(
                     () => quickpatchValidator.validatePreconditions(
-                      checkShorebirdInitialized: true,
+                      checkQuickPatchInitialized: true,
                     ),
                   ),
-                  throwsA(isA<ShorebirdNotInitializedException>()),
+                  throwsA(isA<QuickPatchNotInitializedException>()),
                 );
                 verifyInOrder([
                   () => logger.err(

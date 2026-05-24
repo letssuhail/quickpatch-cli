@@ -18,8 +18,8 @@
 
 import 'package:space_gen/space_gen.dart';
 
-class ShorebirdFileRenderer extends FileRenderer {
-  ShorebirdFileRenderer(super.config);
+class QuickPatchFileRenderer extends FileRenderer {
+  QuickPatchFileRenderer(super.config);
 
   @override
   String modelPath(LayoutContext context) {
@@ -111,4 +111,4 @@ class ShorebirdFileRenderer extends FileRenderer {
 }
 
 Future<int> main(List<String> arguments) =>
-    runCli(arguments, fileRendererBuilder: ShorebirdFileRenderer.new);
+    runCli(arguments, fileRendererBuilder: QuickPatchFileRenderer.new);

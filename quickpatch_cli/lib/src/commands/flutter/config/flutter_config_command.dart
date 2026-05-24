@@ -7,7 +7,7 @@ import 'package:quickpatch_cli/src/quickpatch_process.dart';
 /// `quickpatch flutter config`
 /// Manage your QuickPatch Flutter Config.
 /// {@endtemplate}
-class FlutterConfigCommand extends ShorebirdProxyCommand {
+class FlutterConfigCommand extends QuickPatchProxyCommand {
   @override
   String get description =>
       '''Configure Flutter settings. This proxies to the underlying `flutter config` command.''';

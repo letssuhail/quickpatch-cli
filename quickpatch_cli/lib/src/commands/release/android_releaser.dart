@@ -70,7 +70,7 @@ class AndroidReleaser extends Releaser {
     try {
       await quickpatchValidator.validatePreconditions(
         checkUserIsAuthenticated: true,
-        checkShorebirdInitialized: true,
+        checkQuickPatchInitialized: true,
         validators: doctor.androidCommandValidators,
       );
     } on PreconditionFailedException catch (e) {

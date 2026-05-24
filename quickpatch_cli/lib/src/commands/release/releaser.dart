@@ -48,7 +48,7 @@ abstract class Releaser {
   ReleaseType get releaseType;
 
   /// The root directory of the current project.
-  Directory get projectRoot => quickpatchEnv.getShorebirdProjectRoot()!;
+  Directory get projectRoot => quickpatchEnv.getQuickPatchProjectRoot()!;
 
   /// The human-readable description of the release artifact being built (e.g.,
   /// "Android app", "iOS app").

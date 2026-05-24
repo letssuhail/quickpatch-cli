@@ -202,7 +202,7 @@ class AotTools {
     // This will be a path to either a kernel (.dill) file or a Dart script if
     // we're running with a local engine.
     final artifactPath = quickpatchArtifacts.getArtifactPath(
-      artifact: ShorebirdArtifact.aotTools,
+      artifact: QuickPatchArtifact.aotTools,
     );
 
     final QuickPatchProcessResult result;

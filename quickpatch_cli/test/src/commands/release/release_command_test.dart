@@ -193,10 +193,10 @@ void main() {
       });
       when(() => quickpatchEnv.quickpatchRoot).thenReturn(quickpatchRoot);
       when(
-        () => quickpatchEnv.getShorebirdProjectRoot(),
+        () => quickpatchEnv.getQuickPatchProjectRoot(),
       ).thenReturn(projectRoot);
       when(() => quickpatchEnv.flutterRevision).thenReturn(flutterRevision);
-      when(() => quickpatchEnv.usesShorebirdCodePushPackage).thenReturn(true);
+      when(() => quickpatchEnv.usesQuickPatchCodePushPackage).thenReturn(true);
 
       when(
         () => quickpatchFlutter.getVersionAndRevision(),

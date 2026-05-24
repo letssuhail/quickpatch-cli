@@ -79,7 +79,7 @@ void main() {
       registerFallbackValue(Directory(''));
       registerFallbackValue(File(''));
       registerFallbackValue(ReleasePlatform.linux);
-      registerFallbackValue(ShorebirdArtifact.genSnapshotMacosArm64);
+      registerFallbackValue(QuickPatchArtifact.genSnapshotMacosArm64);
       registerFallbackValue(Uri.parse('https://example.com'));
       registerFallbackValue(const LinuxBundleDiffer());
     });
@@ -113,7 +113,7 @@ void main() {
       when(() => logger.progress(any())).thenReturn(progress);
 
       when(
-        () => quickpatchEnv.getShorebirdProjectRoot(),
+        () => quickpatchEnv.getQuickPatchProjectRoot(),
       ).thenReturn(projectRoot);
 
       patcher = LinuxPatcher(

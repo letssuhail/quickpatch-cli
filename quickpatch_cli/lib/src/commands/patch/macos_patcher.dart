@@ -103,7 +103,7 @@ For more information see: ${supportedFlutterVersionsUrl.toLink()}''');
     await artifactBuilder.buildElfAotSnapshot(
       appDillPath: macosBuildResult.kernelFile.path,
       outFilePath: _arm64AotOutputPath,
-      genSnapshotArtifact: ShorebirdArtifact.genSnapshotMacosArm64,
+      genSnapshotArtifact: QuickPatchArtifact.genSnapshotMacosArm64,
       additionalArgs: [
         ...ApplePatcherMixin.splitDebugInfoArgs(splitDebugInfoPath),
         ...obfuscationGenSnapshotArgs,
@@ -117,7 +117,7 @@ For more information see: ${supportedFlutterVersionsUrl.toLink()}''');
     await artifactBuilder.buildElfAotSnapshot(
       appDillPath: macosBuildResult.kernelFile.path,
       outFilePath: _x64AotOutputPath,
-      genSnapshotArtifact: ShorebirdArtifact.genSnapshotMacosX64,
+      genSnapshotArtifact: QuickPatchArtifact.genSnapshotMacosX64,
       additionalArgs: [
         ...ApplePatcherMixin.splitDebugInfoArgs(splitDebugInfoPath),
         ...obfuscationGenSnapshotArgs,

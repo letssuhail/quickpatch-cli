@@ -151,14 +151,14 @@ void main() {
       when(() => releaseArtifact.url).thenReturn(releaseArtifactUrl);
 
       when(
-        () => quickpatchEnv.getShorebirdProjectRoot(),
+        () => quickpatchEnv.getQuickPatchProjectRoot(),
       ).thenReturn(projectRoot);
       when(() => quickpatchEnv.getQuickPatchYaml()).thenReturn(quickpatchYaml);
 
       when(
         () => quickpatchValidator.validatePreconditions(
           checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-          checkShorebirdInitialized: any(named: 'checkShorebirdInitialized'),
+          checkQuickPatchInitialized: any(named: 'checkQuickPatchInitialized'),
         ),
       ).thenAnswer((_) async => {});
 
@@ -177,7 +177,7 @@ void main() {
         when(
           () => quickpatchValidator.validatePreconditions(
             checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-            checkShorebirdInitialized: any(named: 'checkShorebirdInitialized'),
+            checkQuickPatchInitialized: any(named: 'checkQuickPatchInitialized'),
           ),
         ).thenThrow(exception);
       });
@@ -190,7 +190,7 @@ void main() {
         verify(
           () => quickpatchValidator.validatePreconditions(
             checkUserIsAuthenticated: true,
-            checkShorebirdInitialized: true,
+            checkQuickPatchInitialized: true,
           ),
         ).called(1);
       });

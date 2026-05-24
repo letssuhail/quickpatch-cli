@@ -135,8 +135,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
               supportedOperatingSystems: any(
@@ -161,8 +161,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
               supportedOperatingSystems: any(
@@ -180,7 +180,7 @@ void main() {
           verify(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: true,
-              checkShorebirdInitialized: true,
+              checkQuickPatchInitialized: true,
               validators: [flavorValidator],
               supportedOperatingSystems: {Platform.macOS},
             ),
@@ -193,8 +193,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
               supportedOperatingSystems: any(
@@ -305,7 +305,7 @@ To change the version of this release, change your app's version in your pubspec
         ).thenReturn(appDirectory);
 
         when(
-          () => quickpatchEnv.getShorebirdProjectRoot(),
+          () => quickpatchEnv.getQuickPatchProjectRoot(),
         ).thenReturn(projectRoot);
         when(
           () => quickpatchFlutter.getVersionAndRevision(),
@@ -766,7 +766,7 @@ To change the version of this release, change your app's version in your pubspec
       setUp(() {
         when(() => argResults['codesign']).thenReturn(codesign);
         when(
-          () => quickpatchEnv.getShorebirdProjectRoot(),
+          () => quickpatchEnv.getQuickPatchProjectRoot(),
         ).thenReturn(projectRoot);
 
         appDirectory = Directory.systemTemp.createTempSync();
@@ -879,7 +879,7 @@ To change the version of this release, change your app's version in your pubspec
           operatingSystemVersion: operatingSystemVersion,
           quickpatchVersion: packageVersion,
           quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-          usesShorebirdCodePushPackage: false,
+          usesQuickPatchCodePushPackage: false,
         ),
       );
 
@@ -901,7 +901,7 @@ To change the version of this release, change your app's version in your pubspec
                 operatingSystemVersion: operatingSystemVersion,
                 quickpatchVersion: packageVersion,
                 quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-                usesShorebirdCodePushPackage: false,
+                usesQuickPatchCodePushPackage: false,
                 xcodeVersion: xcodeVersion,
               ),
             ),

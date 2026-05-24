@@ -13,7 +13,7 @@ enum JwksFormat {
   /// chains (`x5c`/`x5t` fields).
   jwkCertificate,
 
-  /// Shorebird auth's format: a JWK Set with bare RSA public key parameters
+  /// QuickPatch auth's format: a JWK Set with bare RSA public key parameters
   /// (`n`, `e`, `kid`, `kty`, `use`; no certificates).
   rsaJwk,
 }

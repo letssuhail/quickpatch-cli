@@ -74,7 +74,7 @@ class GetApksCommand extends QuickPatchCommand {
     try {
       await quickpatchValidator.validatePreconditions(
         checkUserIsAuthenticated: true,
-        checkShorebirdInitialized: true,
+        checkQuickPatchInitialized: true,
       );
     } on PreconditionFailedException catch (error) {
       return error.exitCode.code;
@@ -135,7 +135,7 @@ class GetApksCommand extends QuickPatchCommand {
       // so we move the generated apk to build/app/outputs/quickpatch-apk.
       outputDirectory = Directory(
         p.join(
-          quickpatchEnv.getShorebirdProjectRoot()!.path,
+          quickpatchEnv.getQuickPatchProjectRoot()!.path,
           'build',
           'app',
           'outputs',

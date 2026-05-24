@@ -578,8 +578,8 @@ Building patch with Flutter $flutterVersionString
             operatingSystemVersion: platform.operatingSystemVersion,
             quickpatchVersion: packageVersion,
             quickpatchYaml: quickpatchEnv.getQuickPatchYaml()!,
-            usesShorebirdCodePushPackage:
-                quickpatchEnv.usesShorebirdCodePushPackage,
+            usesQuickPatchCodePushPackage:
+                quickpatchEnv.usesQuickPatchCodePushPackage,
           ),
           // Attach the build-trace summary if the build produced one.
           // Null for older Flutter pins without the --quickpatch-trace

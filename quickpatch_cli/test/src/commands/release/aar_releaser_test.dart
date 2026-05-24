@@ -104,7 +104,7 @@ void main() {
       when(() => logger.progress(any())).thenReturn(progress);
 
       when(
-        () => quickpatchEnv.getShorebirdProjectRoot(),
+        () => quickpatchEnv.getQuickPatchProjectRoot(),
       ).thenReturn(projectRoot);
       when(() => quickpatchEnv.androidPackageName).thenReturn(packageName);
 
@@ -141,8 +141,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
               supportedOperatingSystems: any(
@@ -183,8 +183,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
             ),
@@ -196,8 +196,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
             ),
@@ -209,7 +209,7 @@ void main() {
           verify(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: true,
-              checkShorebirdInitialized: true,
+              checkQuickPatchInitialized: true,
             ),
           ).called(1);
         });
@@ -811,7 +811,7 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
 +       maven {
-+           url '../${p.basename(quickpatchEnv.getShorebirdProjectRoot()!.path)}/${p.relative(p.join(projectRoot.path, 'release'))}'
++           url '../${p.basename(quickpatchEnv.getQuickPatchProjectRoot()!.path)}/${p.relative(p.join(projectRoot.path, 'release'))}'
 +       }
 +       maven {
 -           url 'https://storage.googleapis.com/download.flutter.io'

@@ -10,7 +10,7 @@ enum AuthProvider {
   /// The user authenticated with their Azure/Entra account.
   microsoft('Microsoft'),
 
-  /// The user authenticated via Shorebird's own auth service.
+  /// The user authenticated via QuickPatch's own auth service.
   quickpatch('QuickPatch');
 
   const AuthProvider(this.displayName);

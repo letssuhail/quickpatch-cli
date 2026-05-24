@@ -110,7 +110,7 @@ abstract class QuickPatchCommand extends Command<int> {
     try {
       await quickpatchValidator.validatePreconditions(
         checkUserIsAuthenticated: true,
-        checkShorebirdInitialized: explicitAppId == null,
+        checkQuickPatchInitialized: explicitAppId == null,
       );
     } on PreconditionFailedException catch (error) {
       return (appId: '', errorCode: error.exitCode.code);
@@ -145,7 +145,7 @@ abstract class QuickPatchCommand extends Command<int> {
 /// {@template quickpatch_proxy_command}
 /// A command in the QuickPatch CLI that proxies to an underlying process.
 /// {@endtemplate}
-abstract class ShorebirdProxyCommand extends QuickPatchCommand {
+abstract class QuickPatchProxyCommand extends QuickPatchCommand {
   @override
   ArgParser get argParser => ArgParser.allowAnything();
 }

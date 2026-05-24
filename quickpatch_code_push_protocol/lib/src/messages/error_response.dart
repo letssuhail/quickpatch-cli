@@ -2,7 +2,7 @@ import 'package:meta/meta.dart';
 import 'package:quickpatch_code_push_protocol/model_helpers.dart';
 
 /// {@template error_response}
-/// Standard error response body from the Shorebird CodePush API.
+/// Standard error response body from the QuickPatch API.
 /// {@endtemplate}
 @immutable
 class ErrorResponse {

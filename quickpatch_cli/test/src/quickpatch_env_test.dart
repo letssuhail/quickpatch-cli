@@ -153,13 +153,13 @@ void main() {
       );
     });
 
-    group('getShorebirdProjectRoot', () {
+    group('getQuickPatchProjectRoot', () {
       test('returns null when no QuickPatch project exists', () {
         final tempDir = Directory.systemTemp.createTempSync();
         expect(
           IOOverrides.runZoned(
             () =>
-                runWithOverrides(() => quickpatchEnv.getShorebirdProjectRoot()),
+                runWithOverrides(() => quickpatchEnv.getQuickPatchProjectRoot()),
             getCurrentDirectory: () => tempDir,
           ),
           isNull,
@@ -175,7 +175,7 @@ void main() {
           ).createSync(recursive: true);
           final projectRoot = IOOverrides.runZoned(
             () =>
-                runWithOverrides(() => quickpatchEnv.getShorebirdProjectRoot()),
+                runWithOverrides(() => quickpatchEnv.getQuickPatchProjectRoot()),
             getCurrentDirectory: () => tempDir,
           );
           expect(projectRoot!.path, equals(tempDir.path));
@@ -192,7 +192,7 @@ void main() {
           ).createSync(recursive: true);
           final projectRoot = IOOverrides.runZoned(
             () =>
-                runWithOverrides(() => quickpatchEnv.getShorebirdProjectRoot()),
+                runWithOverrides(() => quickpatchEnv.getQuickPatchProjectRoot()),
             getCurrentDirectory: () => nestedDir,
           );
           expect(projectRoot!.path, equals(tempDir.path));
@@ -692,7 +692,7 @@ test-revision
       });
     });
 
-    group('usesShorebirdCodePushPackage', () {
+    group('usesQuickPatchCodePushPackage', () {
       group('when pubspec.yaml does not contain quickpatch_code_push', () {
         setUp(() {
           final tempDir = Directory.systemTemp.createTempSync();
@@ -712,7 +712,7 @@ dependencies:
 
         test('returns false', () {
           expect(
-            runWithOverrides(() => quickpatchEnv.usesShorebirdCodePushPackage),
+            runWithOverrides(() => quickpatchEnv.usesQuickPatchCodePushPackage),
             isFalse,
           );
         });
@@ -738,7 +738,7 @@ dependencies:
 
         test('returns true', () {
           expect(
-            runWithOverrides(() => quickpatchEnv.usesShorebirdCodePushPackage),
+            runWithOverrides(() => quickpatchEnv.usesQuickPatchCodePushPackage),
             isTrue,
           );
         });

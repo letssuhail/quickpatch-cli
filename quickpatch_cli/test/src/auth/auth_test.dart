@@ -710,7 +710,7 @@ void main() {
               );
 
               final onRefreshCredentialsCalls = <oauth2.AccessCredentials>[];
-              final expiredShorebirdCredentials = oauth2.AccessCredentials(
+              final expiredQuickPatchCredentials = oauth2.AccessCredentials(
                 oauth2.AccessToken(
                   'Bearer',
                   'accessToken',
@@ -722,7 +722,7 @@ void main() {
               );
 
               final client = AuthenticatedClient.credentials(
-                credentials: expiredShorebirdCredentials,
+                credentials: expiredQuickPatchCredentials,
                 httpClient: httpClient,
                 authServiceUri: Uri.parse('https://auth.quickpatch.dev'),
                 onRefreshCredentials: onRefreshCredentialsCalls.add,
@@ -770,7 +770,7 @@ void main() {
               ),
             ).thenThrow(Exception('refresh failed'));
 
-            final expiredShorebirdCredentials = oauth2.AccessCredentials(
+            final expiredQuickPatchCredentials = oauth2.AccessCredentials(
               oauth2.AccessToken(
                 'Bearer',
                 'accessToken',
@@ -782,7 +782,7 @@ void main() {
             );
 
             client = AuthenticatedClient.credentials(
-              credentials: expiredShorebirdCredentials,
+              credentials: expiredQuickPatchCredentials,
               httpClient: httpClient,
               authServiceUri: Uri.parse('https://auth.quickpatch.dev'),
             );

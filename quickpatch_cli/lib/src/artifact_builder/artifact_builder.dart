@@ -40,7 +40,7 @@ class ArtifactBuildException implements Exception {
 
 /// Used to wrap code that invokes `flutter build` with QuickPatch's fork of
 /// Flutter.
-typedef ShorebirdBuildCommand = Future<void> Function();
+typedef QuickPatchBuildCommand = Future<void> Function();
 
 /// {@template apple_build_result}
 /// Metadata about the result of a `flutter build` invocation for an apple
@@ -164,7 +164,7 @@ ${link(uri: Uri.parse('https://github.com/letssuhail/quickpatch/issues/new'))}
     String? base64PublicKey,
     int? ddMaxBytes,
   }) async {
-    await _runShorebirdBuildCommand(() async {
+    await _runQuickPatchBuildCommand(() async {
       const executable = 'flutter';
       final targetPlatformArgs = targetPlatforms?.targetPlatformArg;
       final arguments = [
@@ -204,7 +204,7 @@ Reason: Exited with code $exitCode.''',
       }
     });
 
-    final projectRoot = quickpatchEnv.getShorebirdProjectRoot()!;
+    final projectRoot = quickpatchEnv.getQuickPatchProjectRoot()!;
     try {
       return quickpatchAndroidArtifacts.findAab(
         project: projectRoot,
@@ -235,7 +235,7 @@ Reason: Exited with code $exitCode.''',
     String? base64PublicKey,
     int? ddMaxBytes,
   }) async {
-    await _runShorebirdBuildCommand(() async {
+    await _runQuickPatchBuildCommand(() async {
       const executable = 'flutter';
       final targetPlatformArgs = targetPlatforms?.targetPlatformArg;
       final arguments = [
@@ -279,7 +279,7 @@ Reason: Exited with code $exitCode.''',
         );
       }
     });
-    final projectRoot = quickpatchEnv.getShorebirdProjectRoot()!;
+    final projectRoot = quickpatchEnv.getQuickPatchProjectRoot()!;
     try {
       return quickpatchAndroidArtifacts.findApk(
         project: projectRoot,
@@ -308,7 +308,7 @@ Reason: Exited with code $exitCode.''',
     String? base64PublicKey,
     int? ddMaxBytes,
   }) async {
-    return _runShorebirdBuildCommand(() async {
+    return _runQuickPatchBuildCommand(() async {
       const executable = 'flutter';
       final targetPlatformArgs = targetPlatforms?.targetPlatformArg;
       final arguments = [
@@ -357,7 +357,7 @@ Reason: Exited with code $exitCode.''',
     String? base64PublicKey,
     int? ddMaxBytes,
   }) async {
-    await _runShorebirdBuildCommand(() async {
+    await _runQuickPatchBuildCommand(() async {
       const executable = 'flutter';
       final arguments = [
         'build',
@@ -406,7 +406,7 @@ Reason: Exited with code $exitCode.''',
     String? base64PublicKey,
     int? ddMaxBytes,
   }) async {
-    final projectRoot = quickpatchEnv.getShorebirdProjectRoot()!;
+    final projectRoot = quickpatchEnv.getQuickPatchProjectRoot()!;
     // Delete the .dart_tool directory to ensure that the app is rebuilt. This
     // is necessary because we always look for a recently modified app.dill.
     final dartToolDir = Directory(p.join(projectRoot.path, '.dart_tool'));
@@ -414,7 +414,7 @@ Reason: Exited with code $exitCode.''',
       dartToolDir.deleteSync(recursive: true);
     }
     String? appDillPath;
-    await _runShorebirdBuildCommand(() async {
+    await _runQuickPatchBuildCommand(() async {
       const executable = 'flutter';
       final arguments = [
         'build',
@@ -476,7 +476,7 @@ Reason: Exited with code $exitCode.''',
     String? base64PublicKey,
     int? ddMaxBytes,
   }) async {
-    final projectRoot = quickpatchEnv.getShorebirdProjectRoot()!;
+    final projectRoot = quickpatchEnv.getQuickPatchProjectRoot()!;
     // Delete the .dart_tool directory to ensure that the app is rebuilt. This
     // is necessary because we always look for a recently modified app.dill.
     final dartToolDir = Directory(p.join(projectRoot.path, '.dart_tool'));
@@ -485,7 +485,7 @@ Reason: Exited with code $exitCode.''',
     }
 
     String? appDillPath;
-    await _runShorebirdBuildCommand(() async {
+    await _runQuickPatchBuildCommand(() async {
       const executable = 'flutter';
       final arguments = [
         'build',
@@ -544,7 +544,7 @@ Reason: Exited with code $exitCode.''',
     String? base64PublicKey,
     int? ddMaxBytes,
   }) async {
-    final projectRoot = quickpatchEnv.getShorebirdProjectRoot()!;
+    final projectRoot = quickpatchEnv.getQuickPatchProjectRoot()!;
     // Delete the .dart_tool directory to ensure that the app is rebuilt. This
     // is necessary because we always look for a recently modified app.dill.
     final dartToolDir = Directory(p.join(projectRoot.path, '.dart_tool'));
@@ -552,7 +552,7 @@ Reason: Exited with code $exitCode.''',
       dartToolDir.deleteSync(recursive: true);
     }
     String? appDillPath;
-    await _runShorebirdBuildCommand(() async {
+    await _runQuickPatchBuildCommand(() async {
       const executable = 'flutter';
       final arguments = [
         'build',
@@ -716,7 +716,7 @@ Reason: Exited with code $exitCode.''',
     final environment = BuildEnvironment.detect(
       environment: scoped_platform.platform.environment,
       homeDir: _homeDirectory(),
-      projectRoot: quickpatchEnv.getShorebirdProjectRoot(),
+      projectRoot: quickpatchEnv.getQuickPatchProjectRoot(),
     );
     // If the trace reports a longer build than the command has been running
     // (clock skew, malformed trace), treat overhead as zero rather than
@@ -748,7 +748,7 @@ Reason: Exited with code $exitCode.''',
   /// QuickPatch's fork of Flutter) with a try/finally that runs
   /// `flutter pub get` with the system installation of Flutter to reset
   /// `.dart_tool/package_config.json` to the system Flutter.
-  Future<void> _runShorebirdBuildCommand(ShorebirdBuildCommand command) async {
+  Future<void> _runQuickPatchBuildCommand(QuickPatchBuildCommand command) async {
     try {
       await command();
     } finally {
@@ -791,7 +791,7 @@ Either run `flutter pub get` manually, or follow the steps in ${cannotRunInVSCod
   Future<File> buildElfAotSnapshot({
     required String appDillPath,
     required String outFilePath,
-    required ShorebirdArtifact genSnapshotArtifact,
+    required QuickPatchArtifact genSnapshotArtifact,
     List<String> additionalArgs = const [],
   }) async {
     final arguments = [
@@ -832,7 +832,7 @@ Either run `flutter pub get` manually, or follow the steps in ${cannotRunInVSCod
     String? base64PublicKey,
     int? ddMaxBytes,
   }) async {
-    await _runShorebirdBuildCommand(() async {
+    await _runQuickPatchBuildCommand(() async {
       const executable = 'flutter';
       final arguments = [
         'build',

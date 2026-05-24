@@ -11,8 +11,8 @@ import 'mocks.dart';
 
 void main() {
   group(QuickPatchVersion, () {
-    const currentShorebirdRevision = 'revision-1';
-    const newerShorebirdRevision = 'revision-2';
+    const currentQuickPatchRevision = 'revision-1';
+    const newerQuickPatchRevision = 'revision-2';
 
     late Git git;
     late QuickPatchVersion quickpatchVersionManager;
@@ -46,7 +46,7 @@ void main() {
           revision: any(named: 'revision'),
           directory: any(named: 'directory'),
         ),
-      ).thenAnswer((_) async => currentShorebirdRevision);
+      ).thenAnswer((_) async => currentQuickPatchRevision);
       when(
         () => git.reset(
           revision: any(named: 'revision'),
@@ -91,9 +91,9 @@ void main() {
         ).thenAnswer((invocation) async {
           final revision = invocation.namedArguments[#revision] as String;
           if (revision == 'HEAD') {
-            return currentShorebirdRevision;
+            return currentQuickPatchRevision;
           } else if (revision == '@{upstream}') {
-            return newerShorebirdRevision;
+            return newerQuickPatchRevision;
           }
           throw UnsupportedError('Unexpected revision: $revision');
         });

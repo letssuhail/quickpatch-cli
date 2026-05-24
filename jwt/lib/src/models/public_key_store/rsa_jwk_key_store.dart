@@ -9,7 +9,7 @@ import 'package:pointycastle/pointycastle.dart' as pointycastle;
 part 'rsa_jwk_key_store.g.dart';
 
 /// {@template rsa_jwk_key_store}
-/// A collection of bare RSA JSON Web Keys, as produced by Shorebird's auth
+/// A collection of bare RSA JSON Web Keys, as produced by QuickPatch's auth
 /// service.
 ///
 /// Unlike [JwkKeyStore], which wraps X.509 certificates, this key store

@@ -96,7 +96,7 @@ More info: ${troubleshootingUrl.toLink()}.
   String? get supplementaryReleaseArtifactArch => null;
 
   /// The root directory of the current project.
-  Directory get projectRoot => quickpatchEnv.getShorebirdProjectRoot()!;
+  Directory get projectRoot => quickpatchEnv.getQuickPatchProjectRoot()!;
 
   /// Asserts that the command can be run.
   Future<void> assertPreconditions();

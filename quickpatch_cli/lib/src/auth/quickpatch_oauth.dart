@@ -11,15 +11,15 @@ import 'package:path/path.dart' as p;
 import 'package:quickpatch_cli/src/quickpatch_env.dart';
 
 /// Exception thrown when the QuickPatch auth flow fails.
-class ShorebirdAuthException implements Exception {
-  /// Creates a [ShorebirdAuthException] with the given [message].
-  const ShorebirdAuthException(this.message);
+class QuickPatchAuthException implements Exception {
+  /// Creates a [QuickPatchAuthException] with the given [message].
+  const QuickPatchAuthException(this.message);
 
   /// The error message.
   final String message;
 
   @override
-  String toString() => 'ShorebirdAuthException: $message';
+  String toString() => 'QuickPatchAuthException: $message';
 }
 
 /// Implements the full loopback login flow for QuickPatch auth.
@@ -90,7 +90,7 @@ Future<HttpRequest> _waitForCallback(
     return await completer.future.timeout(
       timeout,
       onTimeout: () {
-        throw const ShorebirdAuthException(
+        throw const QuickPatchAuthException(
           'Timed out waiting for authentication response.',
         );
       },
@@ -103,7 +103,7 @@ Future<HttpRequest> _waitForCallback(
 /// Sends a success page to the browser and extracts the auth code from the
 /// callback [request].
 ///
-/// Throws [ShorebirdAuthException] if the callback contains an error or is
+/// Throws [QuickPatchAuthException] if the callback contains an error or is
 /// missing the auth code.
 Future<String> _extractAuthCode(HttpRequest request) async {
   final code = request.uri.queryParameters['code'];
@@ -119,13 +119,13 @@ Future<String> _extractAuthCode(HttpRequest request) async {
   await request.response.close();
 
   if (error != null) {
-    throw ShorebirdAuthException(
+    throw QuickPatchAuthException(
       'Authentication failed: $error',
     );
   }
 
   if (code == null) {
-    throw const ShorebirdAuthException(
+    throw const QuickPatchAuthException(
       'Authentication failed: no auth code received.',
     );
   }
@@ -138,14 +138,14 @@ Future<String> _extractAuthCode(HttpRequest request) async {
 /// POSTs to the auth service's /token endpoint with
 /// `grant_type=refresh_token` and returns new [oauth2.AccessCredentials]
 /// including a rotated refresh token.
-Future<oauth2.AccessCredentials> refreshShorebirdCredentials(
+Future<oauth2.AccessCredentials> refreshQuickPatchCredentials(
   oauth2.AccessCredentials credentials,
   http.Client httpClient, {
   required Uri authBaseUrl,
 }) async {
   final refreshToken = credentials.refreshToken;
   if (refreshToken == null) {
-    throw const ShorebirdAuthException('No refresh token available.');
+    throw const QuickPatchAuthException('No refresh token available.');
   }
 
   final tokenUrl = authBaseUrl.replace(
@@ -161,7 +161,7 @@ Future<oauth2.AccessCredentials> refreshShorebirdCredentials(
   );
 
   if (response.statusCode != HttpStatus.ok) {
-    throw ShorebirdAuthException(
+    throw QuickPatchAuthException(
       'Token refresh failed (${response.statusCode}): ${response.body}',
     );
   }
@@ -189,7 +189,7 @@ Future<oauth2.AccessCredentials> _exchangeAuthCode({
   );
 
   if (response.statusCode != HttpStatus.ok) {
-    throw ShorebirdAuthException(
+    throw QuickPatchAuthException(
       'Token exchange failed (${response.statusCode}): ${response.body}',
     );
   }
@@ -224,13 +224,13 @@ oauth2.AccessCredentials _parseTokenResponse(String responseBody) {
   try {
     jwt = Jwt.parse(accessTokenValue);
   } on FormatException catch (e) {
-    throw ShorebirdAuthException('Invalid access token: ${e.message}');
+    throw QuickPatchAuthException('Invalid access token: ${e.message}');
   }
 
   // Validate the issuer matches the expected auth service.
   final expectedIssuer = quickpatchEnv.jwtIssuer;
   if (jwt.payload.iss != expectedIssuer) {
-    throw ShorebirdAuthException(
+    throw QuickPatchAuthException(
       'Token issuer mismatch: expected $expectedIssuer, '
       'got ${jwt.payload.iss}',
     );

@@ -64,7 +64,7 @@ To change the version of this release, change your app's version in your pubspec
     try {
       await quickpatchValidator.validatePreconditions(
         checkUserIsAuthenticated: true,
-        checkShorebirdInitialized: true,
+        checkQuickPatchInitialized: true,
         validators: doctor.windowsCommandValidators,
         supportedOperatingSystems: {Platform.windows},
       );
@@ -104,7 +104,7 @@ To change the version of this release, change your app's version in your pubspec
     required Release release,
     required String appId,
   }) async {
-    final projectRoot = quickpatchEnv.getShorebirdProjectRoot()!;
+    final projectRoot = quickpatchEnv.getQuickPatchProjectRoot()!;
     final releaseDir = artifactManager.getWindowsReleaseDirectory();
 
     if (!releaseDir.existsSync()) {

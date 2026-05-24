@@ -35,7 +35,7 @@ class OrganizationUser {
     return OrganizationUser.fromJson(json);
   }
 
-  /// A Shorebird user with non-sensitive information only.
+  /// A QuickPatch user with non-sensitive information only.
   final PublicUser user;
 
   /// A role that a user can have relative to an Organization or App.

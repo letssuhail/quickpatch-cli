@@ -59,7 +59,7 @@ class PatchCheckRequest {
   /// The current patch hash of the app.
   final String? patchHash;
 
-  /// A platform to which a Shorebird release can be deployed.
+  /// A platform to which a QuickPatch release can be deployed.
   final ReleasePlatform platform;
 
   /// The architecture of the app.

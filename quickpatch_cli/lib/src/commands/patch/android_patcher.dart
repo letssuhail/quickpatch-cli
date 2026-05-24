@@ -72,7 +72,7 @@ See more info about the issue ${link(uri: Uri.parse('https://github.com/letssuha
     try {
       await quickpatchValidator.validatePreconditions(
         checkUserIsAuthenticated: true,
-        checkShorebirdInitialized: true,
+        checkQuickPatchInitialized: true,
         validators: doctor.androidCommandValidators,
       );
     } on PreconditionFailedException catch (e) {

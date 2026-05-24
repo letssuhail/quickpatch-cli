@@ -12,13 +12,13 @@ import 'package:test/test.dart';
 import 'mocks.dart';
 
 void main() {
-  group(ShorebirdCachedArtifacts, () {
+  group(QuickPatchCachedArtifacts, () {
     const engineRevision = 'engine-revision';
     late Cache cache;
     late Directory flutterDirectory;
     late Directory artifactDirectory;
     late QuickPatchEnv quickpatchEnv;
-    late ShorebirdCachedArtifacts artifacts;
+    late QuickPatchCachedArtifacts artifacts;
 
     R runWithOverrides<R>(R Function() body) {
       return runScoped(
@@ -38,7 +38,7 @@ void main() {
       artifactDirectory = Directory(p.join(tmpDir.path, 'artifacts'))
         ..createSync(recursive: true);
       quickpatchEnv = MockQuickPatchEnv();
-      artifacts = const ShorebirdCachedArtifacts();
+      artifacts = const QuickPatchCachedArtifacts();
 
       when(
         () => cache.getArtifactDirectory(any()),
@@ -79,7 +79,7 @@ void main() {
             expect(
               runWithOverrides(
                 () => artifacts.getArtifactPath(
-                  artifact: ShorebirdArtifact.aotTools,
+                  artifact: QuickPatchArtifact.aotTools,
                 ),
               ),
               equals(aotToolsKernelPath),
@@ -96,7 +96,7 @@ void main() {
             expect(
               runWithOverrides(
                 () => artifacts.getArtifactPath(
-                  artifact: ShorebirdArtifact.aotTools,
+                  artifact: QuickPatchArtifact.aotTools,
                 ),
               ),
               equals(aotToolsExePath),
@@ -109,7 +109,7 @@ void main() {
         expect(
           runWithOverrides(
             () => artifacts.getArtifactPath(
-              artifact: ShorebirdArtifact.genSnapshotIos,
+              artifact: QuickPatchArtifact.genSnapshotIos,
             ),
           ),
           equals(
@@ -130,7 +130,7 @@ void main() {
         expect(
           runWithOverrides(
             () => artifacts.getArtifactPath(
-              artifact: ShorebirdArtifact.genSnapshotMacosArm64,
+              artifact: QuickPatchArtifact.genSnapshotMacosArm64,
             ),
           ),
           equals(
@@ -151,7 +151,7 @@ void main() {
         expect(
           runWithOverrides(
             () => artifacts.getArtifactPath(
-              artifact: ShorebirdArtifact.genSnapshotMacosX64,
+              artifact: QuickPatchArtifact.genSnapshotMacosX64,
             ),
           ),
           equals(
@@ -172,7 +172,7 @@ void main() {
         expect(
           runWithOverrides(
             () => artifacts.getArtifactPath(
-              artifact: ShorebirdArtifact.analyzeSnapshotIos,
+              artifact: QuickPatchArtifact.analyzeSnapshotIos,
             ),
           ),
           equals(
@@ -193,7 +193,7 @@ void main() {
         expect(
           runWithOverrides(
             () => artifacts.getArtifactPath(
-              artifact: ShorebirdArtifact.analyzeSnapshotMacOS,
+              artifact: QuickPatchArtifact.analyzeSnapshotMacOS,
             ),
           ),
           equals(
@@ -212,11 +212,11 @@ void main() {
     });
   });
 
-  group(ShorebirdLocalEngineArtifacts, () {
+  group(QuickPatchLocalEngineArtifacts, () {
     late String localEngineSrcPath;
     late String localEngine;
     late EngineConfig engineConfig;
-    late ShorebirdLocalEngineArtifacts artifacts;
+    late QuickPatchLocalEngineArtifacts artifacts;
 
     R runWithOverrides<R>(R Function() body) {
       return runScoped(
@@ -229,7 +229,7 @@ void main() {
       localEngineSrcPath = 'local_engine_src_path';
       localEngine = 'local_engine';
       engineConfig = MockEngineConfig();
-      artifacts = const ShorebirdLocalEngineArtifacts();
+      artifacts = const QuickPatchLocalEngineArtifacts();
 
       when(
         () => engineConfig.localEngineSrcPath,
@@ -242,7 +242,7 @@ void main() {
         expect(
           runWithOverrides(
             () =>
-                artifacts.getArtifactPath(artifact: ShorebirdArtifact.aotTools),
+                artifacts.getArtifactPath(artifact: QuickPatchArtifact.aotTools),
           ),
           equals(
             p.join(
@@ -263,7 +263,7 @@ void main() {
         expect(
           runWithOverrides(
             () => artifacts.getArtifactPath(
-              artifact: ShorebirdArtifact.genSnapshotIos,
+              artifact: QuickPatchArtifact.genSnapshotIos,
             ),
           ),
           equals(
@@ -282,7 +282,7 @@ void main() {
         expect(
           runWithOverrides(
             () => artifacts.getArtifactPath(
-              artifact: ShorebirdArtifact.genSnapshotMacosArm64,
+              artifact: QuickPatchArtifact.genSnapshotMacosArm64,
             ),
           ),
           equals(
@@ -301,7 +301,7 @@ void main() {
         expect(
           runWithOverrides(
             () => artifacts.getArtifactPath(
-              artifact: ShorebirdArtifact.genSnapshotMacosX64,
+              artifact: QuickPatchArtifact.genSnapshotMacosX64,
             ),
           ),
           equals(
@@ -320,7 +320,7 @@ void main() {
         expect(
           runWithOverrides(
             () => artifacts.getArtifactPath(
-              artifact: ShorebirdArtifact.analyzeSnapshotIos,
+              artifact: QuickPatchArtifact.analyzeSnapshotIos,
             ),
           ),
           equals(
@@ -339,7 +339,7 @@ void main() {
         expect(
           runWithOverrides(
             () => artifacts.getArtifactPath(
-              artifact: ShorebirdArtifact.analyzeSnapshotMacOS,
+              artifact: QuickPatchArtifact.analyzeSnapshotMacOS,
             ),
           ),
           equals(

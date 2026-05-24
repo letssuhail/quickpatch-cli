@@ -99,7 +99,7 @@ class QuickPatchEnv {
   }
 
   /// Whether the project uses package:quickpatch_code_push.
-  bool get usesShorebirdCodePushPackage {
+  bool get usesQuickPatchCodePushPackage {
     final pubspec = getPubspecYaml();
     return pubspec?.dependencies.containsKey('quickpatch_code_push') ?? false;
   }
@@ -185,7 +185,7 @@ class QuickPatchEnv {
   }
 
   /// Returns the root directory of the nearest QuickPatch project.
-  Directory? getShorebirdProjectRoot() {
+  Directory? getQuickPatchProjectRoot() {
     final file = findNearestAncestor(
       where: (path) => getQuickPatchYamlFile(cwd: Directory(path)),
     );
@@ -211,7 +211,7 @@ class QuickPatchEnv {
   /// Returns `null` if the file does not exist.
   /// Throws a [ParsedYamlException] if the file exists but is invalid.
   QuickPatchYaml? getQuickPatchYaml() {
-    final root = getShorebirdProjectRoot();
+    final root = getQuickPatchProjectRoot();
     if (root == null) return null;
     final yaml = getQuickPatchYamlFile(cwd: root).readAsStringSync();
     return checkedYamlDecode(yaml, (m) => QuickPatchYaml.fromJson(m!));

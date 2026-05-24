@@ -109,7 +109,7 @@ void main() {
       when(() => logger.progress(any())).thenReturn(progress);
 
       when(
-        () => quickpatchEnv.getShorebirdProjectRoot(),
+        () => quickpatchEnv.getQuickPatchProjectRoot(),
       ).thenReturn(projectRoot);
 
       androidReleaser = AndroidReleaser(
@@ -127,7 +127,7 @@ void main() {
 
     group('minimumFlutterVersion', () {
       test('is null', () {
-        // Shorebird has always had Android support, so we don't need to
+        // QuickPatch has always had Android support, so we don't need to
         // specify a minimum Flutter version.
         expect(androidReleaser.minimumFlutterVersion, isNull);
       });
@@ -177,8 +177,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
               supportedOperatingSystems: any(
@@ -202,8 +202,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
             ),
@@ -215,8 +215,8 @@ void main() {
           when(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
-              checkShorebirdInitialized: any(
-                named: 'checkShorebirdInitialized',
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
               ),
               validators: any(named: 'validators'),
             ),
@@ -228,7 +228,7 @@ void main() {
           verify(
             () => quickpatchValidator.validatePreconditions(
               checkUserIsAuthenticated: true,
-              checkShorebirdInitialized: true,
+              checkQuickPatchInitialized: true,
               validators: [flavorValidator],
             ),
           ).called(1);
@@ -831,7 +831,7 @@ To change the version of this release, change your app's version in your pubspec
           operatingSystemVersion: operatingSystemVersion,
           quickpatchVersion: packageVersion,
           quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-          usesShorebirdCodePushPackage: true,
+          usesQuickPatchCodePushPackage: true,
         ),
       );
 
@@ -857,7 +857,7 @@ To change the version of this release, change your app's version in your pubspec
                   operatingSystemVersion: operatingSystemVersion,
                   quickpatchVersion: packageVersion,
                   quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-                  usesShorebirdCodePushPackage: true,
+                  usesQuickPatchCodePushPackage: true,
                 ),
               ),
             ),
@@ -887,7 +887,7 @@ To change the version of this release, change your app's version in your pubspec
                   operatingSystemVersion: operatingSystemVersion,
                   quickpatchVersion: packageVersion,
                   quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
-                  usesShorebirdCodePushPackage: true,
+                  usesQuickPatchCodePushPackage: true,
                 ),
               ),
             ),

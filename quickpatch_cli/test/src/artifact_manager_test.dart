@@ -67,7 +67,7 @@ void main() {
       );
 
       when(
-        () => quickpatchEnv.getShorebirdProjectRoot(),
+        () => quickpatchEnv.getQuickPatchProjectRoot(),
       ).thenReturn(projectRoot);
 
       artifactManager = ArtifactManager();

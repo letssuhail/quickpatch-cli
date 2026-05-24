@@ -1,5 +1,5 @@
 name: quickpatch_code_push_protocol
-description: Library which contains common interfaces used by Shorebird CodePush
+description: Library which contains common interfaces used by QuickPatch
 version: 0.1.0+1
 repository: https://github.com/letssuhail/quickpatch
 resolution: workspace

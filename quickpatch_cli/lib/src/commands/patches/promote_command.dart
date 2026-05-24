@@ -63,7 +63,7 @@ class PromoteCommand extends QuickPatchCommand {
     try {
       await quickpatchValidator.validatePreconditions(
         checkUserIsAuthenticated: true,
-        checkShorebirdInitialized: true,
+        checkQuickPatchInitialized: true,
       );
     } on PreconditionFailedException catch (error) {
       return error.exitCode.code;

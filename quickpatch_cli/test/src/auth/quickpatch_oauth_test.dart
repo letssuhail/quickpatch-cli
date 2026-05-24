@@ -282,7 +282,7 @@ void main() {
           },
         ),
         throwsA(
-          isA<ShorebirdAuthException>().having(
+          isA<QuickPatchAuthException>().having(
             (e) => e.message,
             'message',
             contains('invalid_redirect'),
@@ -305,7 +305,7 @@ void main() {
           },
         ),
         throwsA(
-          isA<ShorebirdAuthException>().having(
+          isA<QuickPatchAuthException>().having(
             (e) => e.message,
             'message',
             contains('no auth code received'),
@@ -338,7 +338,7 @@ void main() {
           },
         ),
         throwsA(
-          isA<ShorebirdAuthException>().having(
+          isA<QuickPatchAuthException>().having(
             (e) => e.message,
             'message',
             contains('Token exchange failed (401)'),
@@ -358,7 +358,7 @@ void main() {
           timeout: const Duration(milliseconds: 100),
         ),
         throwsA(
-          isA<ShorebirdAuthException>().having(
+          isA<QuickPatchAuthException>().having(
             (e) => e.message,
             'message',
             contains('Timed out'),
@@ -399,7 +399,7 @@ void main() {
           ),
         ),
         throwsA(
-          isA<ShorebirdAuthException>().having(
+          isA<QuickPatchAuthException>().having(
             (e) => e.message,
             'message',
             contains('Invalid access token'),
@@ -441,7 +441,7 @@ void main() {
           ),
         ),
         throwsA(
-          isA<ShorebirdAuthException>().having(
+          isA<QuickPatchAuthException>().having(
             (e) => e.message,
             'message',
             contains('Token issuer mismatch'),
@@ -647,7 +647,7 @@ void main() {
           authBaseUrl: authBaseUrl,
         ),
         throwsA(
-          isA<ShorebirdAuthException>().having(
+          isA<QuickPatchAuthException>().having(
             (e) => e.message,
             'message',
             contains('No refresh token available'),
@@ -681,7 +681,7 @@ void main() {
           authBaseUrl: authBaseUrl,
         ),
         throwsA(
-          isA<ShorebirdAuthException>().having(
+          isA<QuickPatchAuthException>().having(
             (e) => e.message,
             'message',
             contains('Token refresh failed (401)'),
@@ -747,7 +747,7 @@ void main() {
           ),
         ),
         throwsA(
-          isA<ShorebirdAuthException>().having(
+          isA<QuickPatchAuthException>().having(
             (e) => e.message,
             'message',
             contains('Invalid access token'),
@@ -789,7 +789,7 @@ void main() {
           ),
         ),
         throwsA(
-          isA<ShorebirdAuthException>().having(
+          isA<QuickPatchAuthException>().having(
             (e) => e.message,
             'message',
             contains('Token issuer mismatch'),
@@ -898,12 +898,12 @@ void main() {
     });
   });
 
-  group('ShorebirdAuthException', () {
+  group('QuickPatchAuthException', () {
     test('toString includes message', () {
-      const exception = ShorebirdAuthException('test error');
+      const exception = QuickPatchAuthException('test error');
       expect(
         exception.toString(),
-        equals('ShorebirdAuthException: test error'),
+        equals('QuickPatchAuthException: test error'),
       );
     });
   });

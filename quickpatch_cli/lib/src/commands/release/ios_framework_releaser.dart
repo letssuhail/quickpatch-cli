@@ -31,7 +31,7 @@ class IosFrameworkReleaser extends Releaser with AppleReleaserMixin {
 
   /// The directory where the release artifacts are stored.
   Directory get releaseDirectory => Directory(
-    p.join(quickpatchEnv.getShorebirdProjectRoot()!.path, 'release'),
+    p.join(quickpatchEnv.getQuickPatchProjectRoot()!.path, 'release'),
   );
 
   @override
@@ -88,7 +88,7 @@ class IosFrameworkReleaser extends Releaser with AppleReleaserMixin {
     // subsequent patch builds.
     final sourceLibraryDirectory = artifactManager.getAppXcframeworkDirectory();
     final targetLibraryDirectory = Directory(
-      p.join(quickpatchEnv.getShorebirdProjectRoot()!.path, 'release'),
+      p.join(quickpatchEnv.getQuickPatchProjectRoot()!.path, 'release'),
     );
     if (targetLibraryDirectory.existsSync()) {
       targetLibraryDirectory.deleteSync(recursive: true);

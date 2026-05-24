@@ -172,7 +172,7 @@ class QuickPatchAndroidArtifacts {
 
   /// The path to the aar library.
   static String get aarLibraryPath {
-    final projectRoot = quickpatchEnv.getShorebirdProjectRoot()!;
+    final projectRoot = quickpatchEnv.getQuickPatchProjectRoot()!;
     return p.joinAll([projectRoot.path, 'build', 'host', 'outputs', 'repo']);
   }
 

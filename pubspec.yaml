@@ -1,4 +1,4 @@
-# QuickPatch CLI workspace root. Forked from Shorebird (Apache/MIT, see LICENSE-*).
+# QuickPatch CLI workspace root. Apache/MIT licensed. See LICENSE-* files.
 # Lists only the packages QuickPatch needs.
 name: _
 publish_to: none

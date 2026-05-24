@@ -2,7 +2,7 @@ import 'package:meta/meta.dart';
 import 'package:quickpatch_code_push_protocol/model_helpers.dart';
 
 /// {@template public_user}
-/// A Shorebird user with non-sensitive information only.
+/// A QuickPatch user with non-sensitive information only.
 /// {@endtemplate}
 @immutable
 class PublicUser {

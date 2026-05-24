@@ -15,7 +15,7 @@ abstract interface class PreconditionFailedException implements Exception {
 }
 
 /// An exception thrown when QuickPatch has not been initialized.
-class ShorebirdNotInitializedException implements PreconditionFailedException {
+class QuickPatchNotInitializedException implements PreconditionFailedException {
   @override
   ExitCode get exitCode => ExitCode.config;
 }
@@ -63,7 +63,7 @@ class QuickPatchValidator {
   /// Checks common preconditions for running a command and throws an
   /// appropriate [PreconditionFailedException] if any of them fail.
   Future<void> validatePreconditions({
-    bool checkShorebirdInitialized = false,
+    bool checkQuickPatchInitialized = false,
     bool checkUserIsAuthenticated = false,
     List<Validator> validators = const [],
     Set<String>? supportedOperatingSystems,
@@ -88,7 +88,7 @@ class QuickPatchValidator {
       throw UserNotAuthorizedException();
     }
 
-    if (checkShorebirdInitialized) {
+    if (checkQuickPatchInitialized) {
       if (!quickpatchEnv.hasQuickPatchYaml) {
         logger
           ..err(
@@ -97,7 +97,7 @@ class QuickPatchValidator {
           ..info(
             '''If you have not yet initialized your app, run ${lightCyan.wrap('quickpatch init')} to get started.''',
           );
-        throw ShorebirdNotInitializedException();
+        throw QuickPatchNotInitializedException();
       }
 
       if (!quickpatchEnv.pubspecContainsQuickPatchYaml) {
@@ -112,7 +112,7 @@ To fix, update your pubspec.yaml to include the following:
     assets:
       - quickpatch.yaml # Add this line
 ''');
-        throw ShorebirdNotInitializedException();
+        throw QuickPatchNotInitializedException();
       }
     }
 
