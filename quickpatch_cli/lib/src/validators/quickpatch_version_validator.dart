@@ -17,13 +17,12 @@ class QuickPatchVersionValidator extends Validator {
 
     try {
       isQuickPatchUpToDate = await quickpatchVersion.isLatest();
-    } on ProcessException catch (e) {
-      return [
-        ValidationIssue(
-          severity: ValidationIssueSeverity.error,
-          message: 'Failed to get quickpatch version. Error: ${e.message}',
-        ),
-      ];
+    } on ProcessException {
+      // The version check shells out to git against the install directory.
+      // Binary installs (via install.sh) are not git checkouts, so git fails
+      // here — that's expected, not an error. Skip the check silently rather
+      // than surfacing a scary "Failed to get quickpatch version" message.
+      return [];
     }
 
     if (!isQuickPatchUpToDate) {
