@@ -2,12 +2,14 @@ import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:mason_logger/mason_logger.dart';
+import 'package:path/path.dart' as p;
 import 'package:quickpatch_cli/src/code_push_client_wrapper.dart';
 import 'package:quickpatch_cli/src/common_arguments.dart';
 import 'package:quickpatch_cli/src/config/config.dart';
 import 'package:quickpatch_cli/src/doctor.dart';
 import 'package:quickpatch_cli/src/executables/executables.dart';
 import 'package:quickpatch_cli/src/logging/logging.dart';
+import 'package:quickpatch_cli/src/platform.dart';
 import 'package:quickpatch_cli/src/platform/platform.dart';
 import 'package:quickpatch_cli/src/pubspec_editor.dart';
 import 'package:quickpatch_cli/src/quickpatch_command.dart';
@@ -389,11 +391,29 @@ app_id:
 
     final editor = YamlEditor(content)..update(['app_id'], appId);
 
+    // Bake the self-hosted server URL into the config so the on-device updater
+    // queries the right server. Derived from QUICKPATCH_HOSTED_URL (the same
+    // server the CLI publishes to). Without this the updater uses its default.
+    final hostedUrl =
+        platform.environment['QUICKPATCH_HOSTED_URL'] ??
+        platform.environment['SHOREBIRD_HOSTED_URL'];
+    if (hostedUrl != null && hostedUrl.isNotEmpty) {
+      editor.update(['base_url'], hostedUrl);
+    }
+
     if (flavors != null) editor.update(['flavors'], flavors);
 
+    final yamlContents = editor.toString();
     quickpatchEnv
         .getQuickPatchYamlFile(cwd: projectRoot)
-        .writeAsStringSync(editor.toString());
+        .writeAsStringSync(yamlContents);
+
+    // The native QuickPatch engine loads its config from flutter_assets as
+    // `shorebird.yaml`. Mirror quickpatch.yaml -> shorebird.yaml so the engine
+    // initializes (app_id, auto_update). quickpatch.yaml stays the source file.
+    File(
+      p.join(projectRoot.path, 'shorebird.yaml'),
+    ).writeAsStringSync(yamlContents);
 
     return QuickPatchYaml(appId: appId);
   }

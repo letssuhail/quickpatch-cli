@@ -68,8 +68,11 @@ class QuickPatchEnv {
 
   /// The root directory of the QuickPatch install.
   ///
-  /// Assumes we are running from $ROOT/bin/cache.
+  /// Resolved from QUICKPATCH_ROOT env var when set; otherwise assumes the
+  /// binary lives at $ROOT/bin/cache/quickpatch.
   Directory get quickpatchRoot {
+    final envRoot = platform.environment['QUICKPATCH_ROOT'];
+    if (envRoot != null && envRoot.isNotEmpty) return Directory(envRoot);
     return File(platform.script.toFilePath()).parent.parent.parent;
   }
 
@@ -162,6 +165,21 @@ class QuickPatchEnv {
     return File(p.join(cwd.path, 'quickpatch.yaml'));
   }
 
+  /// Syncs the engine config asset (`shorebird.yaml`) from `quickpatch.yaml`.
+  ///
+  /// The prebuilt native engine reads its config from `flutter_assets/
+  /// shorebird.yaml`. Users only ever edit `quickpatch.yaml`; this mirrors it
+  /// into `shorebird.yaml` so the bundled asset stays current at build time.
+  /// Returns silently if there is no project root or no `quickpatch.yaml`.
+  void syncEngineConfig() {
+    final root = getQuickPatchProjectRoot();
+    if (root == null) return;
+    final source = getQuickPatchYamlFile(cwd: root);
+    if (!source.existsSync()) return;
+    File(p.join(root.path, 'shorebird.yaml'))
+        .writeAsStringSync(source.readAsStringSync());
+  }
+
   /// The `pubspec.yaml` file for this project.
   File getPubspecYamlFile({required Directory cwd}) {
     return File(p.join(cwd.path, 'pubspec.yaml'));
@@ -246,7 +264,10 @@ class QuickPatchEnv {
     if (pubspec.flutter == null) return false;
     if (pubspec.flutter!['assets'] == null) return false;
     final assets = pubspec.flutter!['assets'] as List;
-    return assets.contains('quickpatch.yaml');
+    // The bundled asset the native engine reads is shorebird.yaml. It is an
+    // internal implementation detail of the compiled bundle only; users edit
+    // quickpatch.yaml, which the CLI mirrors into shorebird.yaml at init.
+    return assets.contains('shorebird.yaml');
   }
 
   /// Returns the Android package name from the pubspec.yaml file of a Flutter

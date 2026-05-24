@@ -749,6 +749,9 @@ Reason: Exited with code $exitCode.''',
   /// `flutter pub get` with the system installation of Flutter to reset
   /// `.dart_tool/package_config.json` to the system Flutter.
   Future<void> _runQuickPatchBuildCommand(QuickPatchBuildCommand command) async {
+    // Mirror quickpatch.yaml -> shorebird.yaml so the bundled engine config
+    // asset is current for this build (the native engine reads shorebird.yaml).
+    quickpatchEnv.syncEngineConfig();
     try {
       await command();
     } finally {

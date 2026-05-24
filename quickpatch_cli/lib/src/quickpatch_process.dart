@@ -270,7 +270,13 @@ $stderr''');
       // QuickPatch: when QUICKPATCH_STORAGE_BASE_URL is set, route Flutter's
       // engine downloads through our R2 mirror (mirror serves the
       // download.quickpatch.dev bucket under that path).
-      final mirror = platform.environment['QUICKPATCH_STORAGE_BASE_URL'];
+      // Resolve storage base: explicit override → derive from hosted URL → GCS.
+      final hostedUrl =
+          platform.environment['QUICKPATCH_HOSTED_URL'] ??
+          platform.environment['SHOREBIRD_HOSTED_URL'];
+      final mirror =
+          platform.environment['QUICKPATCH_STORAGE_BASE_URL'] ??
+          (hostedUrl != null ? '$hostedUrl/storage' : null);
       final flutterStorageBaseUrl = mirror != null
           ? '$mirror/download.quickpatch.dev'
           : 'https://download.quickpatch.dev';

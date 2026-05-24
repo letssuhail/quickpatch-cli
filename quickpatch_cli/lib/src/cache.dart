@@ -123,9 +123,16 @@ class Cache {
   /// engine artifacts through our R2-backed mirror instead of the upstream CDN.
   /// e.g. `https://<server>/storage` -> artifact URLs become
   /// `https://<server>/storage/download.quickpatch.dev/quickpatch/<rev>/...`.
-  String get storageBaseUrl =>
-      platform.environment['QUICKPATCH_STORAGE_BASE_URL'] ??
-      'https://storage.googleapis.com';
+  String get storageBaseUrl {
+    if (platform.environment['QUICKPATCH_STORAGE_BASE_URL'] case final v?)
+      return v;
+    // Derive from QUICKPATCH_HOSTED_URL so users don't need a separate env var.
+    final hosted =
+        platform.environment['QUICKPATCH_HOSTED_URL'] ??
+        platform.environment['SHOREBIRD_HOSTED_URL'];
+    if (hosted != null) return '$hosted/storage';
+    return 'https://storage.googleapis.com';
+  }
 
   /// The storage bucket host.
   String get storageBucket => 'download.quickpatch.dev';
