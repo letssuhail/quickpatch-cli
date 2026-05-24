@@ -1,0 +1,14 @@
+# QuickPatch CLI workspace root. Apache/MIT licensed. See LICENSE-* files.
+# Lists only the packages QuickPatch needs.
+name: _
+publish_to: none
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+workspace:
+  - dex
+  - jwt
+  - scoped_deps
+  - quickpatch_build_trace
+  - quickpatch_cli
+  - quickpatch_code_push_client
+  - quickpatch_code_push_protocol

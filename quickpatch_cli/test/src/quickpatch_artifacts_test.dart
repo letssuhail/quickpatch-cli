@@ -1,0 +1,358 @@
+import 'dart:io';
+
+import 'package:mocktail/mocktail.dart';
+import 'package:path/path.dart' as p;
+import 'package:scoped_deps/scoped_deps.dart';
+import 'package:quickpatch_cli/src/cache.dart';
+import 'package:quickpatch_cli/src/engine_config.dart';
+import 'package:quickpatch_cli/src/quickpatch_artifacts.dart';
+import 'package:quickpatch_cli/src/quickpatch_env.dart';
+import 'package:test/test.dart';
+
+import 'mocks.dart';
+
+void main() {
+  group(QuickPatchCachedArtifacts, () {
+    const engineRevision = 'engine-revision';
+    late Cache cache;
+    late Directory flutterDirectory;
+    late Directory artifactDirectory;
+    late QuickPatchEnv quickpatchEnv;
+    late QuickPatchCachedArtifacts artifacts;
+
+    R runWithOverrides<R>(R Function() body) {
+      return runScoped(
+        () => body(),
+        values: {
+          cacheRef.overrideWith(() => cache),
+          quickpatchEnvRef.overrideWith(() => quickpatchEnv),
+        },
+      );
+    }
+
+    setUp(() {
+      cache = MockCache();
+      final tmpDir = Directory.systemTemp.createTempSync();
+      flutterDirectory = Directory(p.join(tmpDir.path, 'flutter'))
+        ..createSync(recursive: true);
+      artifactDirectory = Directory(p.join(tmpDir.path, 'artifacts'))
+        ..createSync(recursive: true);
+      quickpatchEnv = MockQuickPatchEnv();
+      artifacts = const QuickPatchCachedArtifacts();
+
+      when(
+        () => cache.getArtifactDirectory(any()),
+      ).thenReturn(artifactDirectory);
+      when(() => quickpatchEnv.flutterDirectory).thenReturn(flutterDirectory);
+      when(
+        () => quickpatchEnv.quickpatchEngineRevision,
+      ).thenReturn(engineRevision);
+    });
+
+    group('getArtifactPath', () {
+      group('aot-tools', () {
+        const aotToolsKernel = 'aot-tools.dill';
+        const aotToolsExe = 'aot-tools';
+        late String aotToolsKernelPath;
+        late String aotToolsExePath;
+
+        setUp(() {
+          aotToolsKernelPath = p.join(
+            artifactDirectory.path,
+            engineRevision,
+            aotToolsKernel,
+          );
+          aotToolsExePath = p.join(
+            artifactDirectory.path,
+            engineRevision,
+            aotToolsExe,
+          );
+        });
+
+        group('when kernel and executable are present', () {
+          setUp(() {
+            File(aotToolsKernelPath).createSync(recursive: true);
+            File(aotToolsExePath).createSync(recursive: true);
+          });
+
+          test('returns path to kernel file', () async {
+            expect(
+              runWithOverrides(
+                () => artifacts.getArtifactPath(
+                  artifact: QuickPatchArtifact.aotTools,
+                ),
+              ),
+              equals(aotToolsKernelPath),
+            );
+          });
+        });
+
+        group('when only executable is present', () {
+          setUp(() {
+            File(aotToolsExePath).createSync(recursive: true);
+          });
+
+          test('returns path to executable file', () {
+            expect(
+              runWithOverrides(
+                () => artifacts.getArtifactPath(
+                  artifact: QuickPatchArtifact.aotTools,
+                ),
+              ),
+              equals(aotToolsExePath),
+            );
+          });
+        });
+      });
+
+      test('returns correct path for iOS gen_snapshot', () {
+        expect(
+          runWithOverrides(
+            () => artifacts.getArtifactPath(
+              artifact: QuickPatchArtifact.genSnapshotIos,
+            ),
+          ),
+          equals(
+            p.join(
+              flutterDirectory.path,
+              'bin',
+              'cache',
+              'artifacts',
+              'engine',
+              'ios-release',
+              'gen_snapshot_arm64',
+            ),
+          ),
+        );
+      });
+
+      test('returns correct path for macOS arm64 gen_snapshot', () {
+        expect(
+          runWithOverrides(
+            () => artifacts.getArtifactPath(
+              artifact: QuickPatchArtifact.genSnapshotMacosArm64,
+            ),
+          ),
+          equals(
+            p.join(
+              flutterDirectory.path,
+              'bin',
+              'cache',
+              'artifacts',
+              'engine',
+              'darwin-x64-release',
+              'gen_snapshot_arm64',
+            ),
+          ),
+        );
+      });
+
+      test('returns correct path for macOS x64 gen_snapshot', () {
+        expect(
+          runWithOverrides(
+            () => artifacts.getArtifactPath(
+              artifact: QuickPatchArtifact.genSnapshotMacosX64,
+            ),
+          ),
+          equals(
+            p.join(
+              flutterDirectory.path,
+              'bin',
+              'cache',
+              'artifacts',
+              'engine',
+              'darwin-x64-release',
+              'gen_snapshot_x64',
+            ),
+          ),
+        );
+      });
+
+      test('returns correct path for analyze_snapshot on iOS', () {
+        expect(
+          runWithOverrides(
+            () => artifacts.getArtifactPath(
+              artifact: QuickPatchArtifact.analyzeSnapshotIos,
+            ),
+          ),
+          equals(
+            p.join(
+              flutterDirectory.path,
+              'bin',
+              'cache',
+              'artifacts',
+              'engine',
+              'ios-release',
+              'analyze_snapshot_arm64',
+            ),
+          ),
+        );
+      });
+
+      test('returns correct path for analyze_snapshot on macOS', () {
+        expect(
+          runWithOverrides(
+            () => artifacts.getArtifactPath(
+              artifact: QuickPatchArtifact.analyzeSnapshotMacOS,
+            ),
+          ),
+          equals(
+            p.join(
+              flutterDirectory.path,
+              'bin',
+              'cache',
+              'artifacts',
+              'engine',
+              'darwin-x64-release',
+              'analyze_snapshot',
+            ),
+          ),
+        );
+      });
+    });
+  });
+
+  group(QuickPatchLocalEngineArtifacts, () {
+    late String localEngineSrcPath;
+    late String localEngine;
+    late EngineConfig engineConfig;
+    late QuickPatchLocalEngineArtifacts artifacts;
+
+    R runWithOverrides<R>(R Function() body) {
+      return runScoped(
+        () => body(),
+        values: {engineConfigRef.overrideWith(() => engineConfig)},
+      );
+    }
+
+    setUp(() {
+      localEngineSrcPath = 'local_engine_src_path';
+      localEngine = 'local_engine';
+      engineConfig = MockEngineConfig();
+      artifacts = const QuickPatchLocalEngineArtifacts();
+
+      when(
+        () => engineConfig.localEngineSrcPath,
+      ).thenReturn(localEngineSrcPath);
+      when(() => engineConfig.localEngine).thenReturn(localEngine);
+    });
+
+    group('getArtifactPath', () {
+      test('returns correct path for aot tools', () {
+        expect(
+          runWithOverrides(
+            () =>
+                artifacts.getArtifactPath(artifact: QuickPatchArtifact.aotTools),
+          ),
+          equals(
+            p.join(
+              localEngineSrcPath,
+              'flutter',
+              'third_party',
+              'dart',
+              'pkg',
+              'aot_tools',
+              'bin',
+              'aot_tools.dart',
+            ),
+          ),
+        );
+      });
+
+      test('returns correct path for gen_snapshot on iOS', () {
+        expect(
+          runWithOverrides(
+            () => artifacts.getArtifactPath(
+              artifact: QuickPatchArtifact.genSnapshotIos,
+            ),
+          ),
+          equals(
+            p.join(
+              localEngineSrcPath,
+              'out',
+              localEngine,
+              'clang_x64',
+              'gen_snapshot_arm64',
+            ),
+          ),
+        );
+      });
+
+      test('returns correct path for arm64 gen_snapshot on macOS', () {
+        expect(
+          runWithOverrides(
+            () => artifacts.getArtifactPath(
+              artifact: QuickPatchArtifact.genSnapshotMacosArm64,
+            ),
+          ),
+          equals(
+            p.join(
+              localEngineSrcPath,
+              'out',
+              localEngine,
+              'artifacts_arm64',
+              'gen_snapshot',
+            ),
+          ),
+        );
+      });
+
+      test('returns correct path for x64 gen_snapshot on macOS', () {
+        expect(
+          runWithOverrides(
+            () => artifacts.getArtifactPath(
+              artifact: QuickPatchArtifact.genSnapshotMacosX64,
+            ),
+          ),
+          equals(
+            p.join(
+              localEngineSrcPath,
+              'out',
+              localEngine,
+              'artifacts_x64',
+              'gen_snapshot',
+            ),
+          ),
+        );
+      });
+
+      test('returns correct path for analyze_snapshot on iOS', () {
+        expect(
+          runWithOverrides(
+            () => artifacts.getArtifactPath(
+              artifact: QuickPatchArtifact.analyzeSnapshotIos,
+            ),
+          ),
+          equals(
+            p.join(
+              localEngineSrcPath,
+              'out',
+              localEngine,
+              'clang_x64',
+              'analyze_snapshot_arm64',
+            ),
+          ),
+        );
+      });
+
+      test('returns correct path for analyze_snapshot on macOS', () {
+        expect(
+          runWithOverrides(
+            () => artifacts.getArtifactPath(
+              artifact: QuickPatchArtifact.analyzeSnapshotMacOS,
+            ),
+          ),
+          equals(
+            p.join(
+              localEngineSrcPath,
+              'out',
+              localEngine,
+              'clang_x64',
+              'analyze_snapshot',
+            ),
+          ),
+        );
+      });
+    });
+  });
+}

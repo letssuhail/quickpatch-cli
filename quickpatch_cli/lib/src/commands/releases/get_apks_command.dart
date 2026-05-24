@@ -1,0 +1,201 @@
+import 'dart:io';
+
+import 'package:archive/archive_io.dart';
+import 'package:mason_logger/mason_logger.dart';
+import 'package:path/path.dart' as p;
+import 'package:quickpatch_cli/src/artifact_manager.dart';
+import 'package:quickpatch_cli/src/code_push_client_wrapper.dart';
+import 'package:quickpatch_cli/src/common_arguments.dart';
+import 'package:quickpatch_cli/src/config/config.dart';
+import 'package:quickpatch_cli/src/executables/bundletool.dart';
+import 'package:quickpatch_cli/src/extensions/arg_results.dart';
+import 'package:quickpatch_cli/src/logging/quickpatch_logger.dart';
+import 'package:quickpatch_cli/src/release_chooser.dart';
+import 'package:quickpatch_cli/src/quickpatch_command.dart';
+import 'package:quickpatch_cli/src/quickpatch_env.dart';
+import 'package:quickpatch_cli/src/quickpatch_validator.dart';
+import 'package:quickpatch_cli/src/third_party/flutter_tools/lib/flutter_tools.dart';
+import 'package:quickpatch_code_push_client/quickpatch_code_push_client.dart';
+
+/// {@template get_apk_command}
+/// Generates an APK for the release with the specified version.
+/// {@endtemplate}
+class GetApksCommand extends QuickPatchCommand {
+  /// {@macro get_apk_command}
+  GetApksCommand() {
+    argParser
+      ..addOption(
+        CommonArguments.releaseVersionArg.name,
+        help:
+            'The version of the release to generate APKs for '
+            '(e.g. "1.0.0+1"). Prompts for selection if omitted.',
+      )
+      ..addOption(
+        CommonArguments.flavorArg.name,
+        help: 'The build flavor to generate apks for.',
+      )
+      ..addOption(
+        'out',
+        abbr: 'o',
+        help: 'The output directory for the generated apks.',
+      )
+      ..addFlag(
+        'universal',
+        defaultsTo: true,
+        help: 'Whether to generate a universal apk. Defaults to true.',
+      );
+  }
+
+  @override
+  String get name => 'get-apks';
+
+  @override
+  String get description =>
+      'Generates apk(s) for the specified release version.';
+
+  /// The quickpatch app ID for the current project.
+  String get appId => quickpatchEnv.getQuickPatchYaml()!.getAppId(flavor: flavor);
+
+  /// The build flavor, if provided.
+  late String? flavor = results.findOption(
+    CommonArguments.flavorArg.name,
+    argParser: argParser,
+  );
+
+  /// The output directory path for the generated apks. Defaults to the
+  /// project's build directory if not provided.
+  late String? outDirectoryArg = results.findOption(
+    'out',
+    argParser: argParser,
+  );
+
+  @override
+  Future<int> run() async {
+    try {
+      await quickpatchValidator.validatePreconditions(
+        checkUserIsAuthenticated: true,
+        checkQuickPatchInitialized: true,
+      );
+    } on PreconditionFailedException catch (error) {
+      return error.exitCode.code;
+    }
+
+    final Release release;
+    if (results.wasParsed(CommonArguments.releaseVersionArg.name)) {
+      final releaseVersion =
+          results[CommonArguments.releaseVersionArg.name] as String;
+      release = await codePushClientWrapper.getRelease(
+        appId: appId,
+        releaseVersion: releaseVersion,
+      );
+    } else {
+      release = await _promptForRelease();
+    }
+
+    final releaseArtifact = await codePushClientWrapper.getReleaseArtifact(
+      appId: appId,
+      releaseId: release.id,
+      arch: 'aab',
+      platform: ReleasePlatform.android,
+    );
+
+    final aabFile = await _downloadAab(releaseArtifact: releaseArtifact);
+    final apksFile = File(
+      p.join(
+        Directory.systemTemp.createTempSync().path,
+        '${appId}_${release.version}.apks',
+      ),
+    );
+
+    final buildApksProgress = logger.progress(
+      'Building apks for release ${release.version} (app: $appId)',
+    );
+    try {
+      await bundletool.buildApks(
+        bundle: aabFile.path,
+        output: apksFile.path,
+        universal: results['universal'] as bool,
+      );
+      buildApksProgress.complete();
+    } on Exception catch (error) {
+      buildApksProgress.fail('$error');
+      return ExitCode.software.code;
+    }
+
+    final apksZipFile = apksFile.renameSync('${apksFile.path}.zip');
+
+    final Directory outputDirectory;
+    if (outDirectoryArg != null) {
+      outputDirectory = Directory(outDirectoryArg!);
+      if (!outputDirectory.existsSync()) {
+        outputDirectory.createSync(recursive: true);
+      }
+    } else {
+      // The output of `flutter build apk` is build/app/outputs/flutter-apk,
+      // so we move the generated apk to build/app/outputs/quickpatch-apk.
+      outputDirectory = Directory(
+        p.join(
+          quickpatchEnv.getQuickPatchProjectRoot()!.path,
+          'build',
+          'app',
+          'outputs',
+          'quickpatch-apk',
+        ),
+      )..createSync(recursive: true);
+    }
+
+    await extractFileToDisk(apksZipFile.path, outputDirectory.path);
+
+    final apks = outputDirectory
+        .listSync()
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.apk'))
+        .toList();
+    if (apks.isNotEmpty) {
+      logger.info('Generated ${apks.length} apk(s):');
+      for (final file in apks) {
+        logger.info('  - ${lightCyan.wrap(file.path)}');
+      }
+    } else {
+      logger.err(
+        'Failed to extract apks from ${apksZipFile.path} '
+        'to ${outputDirectory.path}',
+      );
+      return ExitCode.software.code;
+    }
+
+    logger.info('apk(s) generated at ${lightCyan.wrap(outputDirectory.path)}');
+    return ExitCode.success.code;
+  }
+
+  Future<Release> _promptForRelease() async {
+    final releases = await codePushClientWrapper.getReleases(
+      appId: appId,
+      sideloadableOnly: true,
+    );
+
+    if (releases.isEmpty) {
+      logger.err('No releases found for app $appId');
+      throw ProcessExit(ExitCode.usage.code);
+    }
+
+    return chooseRelease(
+      releases: releases,
+      action: 'generate an apk for',
+    );
+  }
+
+  Future<File> _downloadAab({required ReleaseArtifact releaseArtifact}) async {
+    final File artifactFile;
+    try {
+      artifactFile = await artifactManager.downloadWithProgressUpdates(
+        Uri.parse(releaseArtifact.url),
+        message: 'Downloading aab',
+      );
+    } on Exception catch (_) {
+      throw ProcessExit(ExitCode.software.code);
+    }
+
+    return artifactFile;
+  }
+}

@@ -1,0 +1,29 @@
+import 'package:quickpatch_code_push_protocol/quickpatch_code_push_protocol.dart';
+import 'package:test/test.dart';
+
+void main() {
+  group(ReleaseArtifact, () {
+    test('can be (de)serialized', () {
+      const artifact = ReleaseArtifact(
+        id: 1,
+        releaseId: 1,
+        arch: 'aarch64',
+        platform: ReleasePlatform.android,
+        url: 'https://example.com',
+        size: 42,
+        hash: 'sha256:1234567890',
+        podfileLockHash: 'podfile-lock-hash',
+        canSideload: true,
+      );
+      expect(
+        ReleaseArtifact.fromJson(artifact.toJson()).toJson(),
+        equals(artifact.toJson()),
+      );
+    });
+
+    // Intentionally removed: the handwritten ReleaseArtifact overrode
+    // toString to return the JSON-encoded body. The generated class does
+    // not, which matches Dart defaults for data classes. Callers that
+    // want a JSON string should call `artifact.toJson().toString()`.
+  });
+}

@@ -1,0 +1,1482 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:mocktail/mocktail.dart';
+import 'package:path/path.dart' as p;
+import 'package:pub_semver/pub_semver.dart';
+import 'package:scoped_deps/scoped_deps.dart';
+import 'package:quickpatch_cli/src/artifact_builder/build_trace_session.dart';
+import 'package:quickpatch_cli/src/cache.dart';
+import 'package:quickpatch_cli/src/executables/executables.dart';
+import 'package:quickpatch_cli/src/logging/logging.dart';
+import 'package:quickpatch_cli/src/quickpatch_artifacts.dart';
+import 'package:quickpatch_cli/src/quickpatch_env.dart';
+import 'package:quickpatch_cli/src/quickpatch_process.dart';
+import 'package:test/test.dart';
+
+import '../mocks.dart';
+
+void main() {
+  group(AotTools, () {
+    late Cache cache;
+    late QuickPatchArtifacts quickpatchArtifacts;
+    late QuickPatchEnv quickpatchEnv;
+    late QuickPatchLogger logger;
+    late QuickPatchProcess process;
+    late Directory workingDirectory;
+    late File dartBinaryFile;
+    late AotTools aotTools;
+
+    R runWithOverrides<R>(
+      R Function() body, {
+      BuildTraceSession? traceSession,
+    }) {
+      return runScoped(
+        body,
+        values: {
+          buildTraceSessionRef.overrideWith(
+            () =>
+                traceSession ??
+                BuildTraceSession(commandStartedAt: DateTime(2023)),
+          ),
+          cacheRef.overrideWith(() => cache),
+          processRef.overrideWith(() => process),
+          quickpatchArtifactsRef.overrideWith(() => quickpatchArtifacts),
+          quickpatchEnvRef.overrideWith(() => quickpatchEnv),
+          loggerRef.overrideWith(() => logger),
+        },
+      );
+    }
+
+    setUp(() {
+      cache = MockCache();
+      process = MockQuickPatchProcess();
+      quickpatchArtifacts = MockQuickPatchArtifacts();
+      quickpatchEnv = MockQuickPatchEnv();
+      logger = MockQuickPatchLogger();
+      dartBinaryFile = File('dart');
+      workingDirectory = Directory('aot-tools test');
+      aotTools = AotTools();
+
+      when(() => cache.updateAll()).thenAnswer((_) async {});
+      when(() => quickpatchEnv.dartBinaryFile).thenReturn(dartBinaryFile);
+      when(
+        () => quickpatchArtifacts.getArtifactPath(
+          artifact: QuickPatchArtifact.aotTools,
+        ),
+      ).thenReturn('aot-tools.dill');
+    });
+
+    group('link', () {
+      final base = p.join('.', 'path', 'to', 'base.aot');
+      final patch = p.join('.', 'path', 'to', 'patch.aot');
+      final analyzeSnapshot = p.join('.', 'path', 'to', 'analyze_snapshot');
+      final genSnapshot = p.join('.', 'path', 'to', 'gen_snapshot');
+      final kernel = p.join('.', 'path', 'to', 'kernel.dill');
+      final outputPath = p.join('.', 'path', 'to', 'out.vmcode');
+      final linkJsonPath = p.join('.', 'path', 'to', 'link.jsonl');
+
+      test('throws exception when process exits with non-zero code', () async {
+        when(
+          () => quickpatchArtifacts.getArtifactPath(
+            artifact: QuickPatchArtifact.aotTools,
+          ),
+        ).thenReturn('aot-tools.dill');
+        when(
+          () => process.run(
+            dartBinaryFile.path,
+            any(),
+            workingDirectory: any(named: 'workingDirectory'),
+          ),
+        ).thenAnswer(
+          (_) async => const QuickPatchProcessResult(
+            exitCode: 1,
+            stdout: '',
+            stderr: 'error',
+          ),
+        );
+        when(
+          () => process.start(
+            dartBinaryFile.path,
+            any(),
+            workingDirectory: any(named: 'workingDirectory'),
+          ),
+        ).thenAnswer((_) async {
+          final mockProcess = MockProcess();
+          when(() => mockProcess.exitCode).thenAnswer((_) async => 1);
+          when(
+            () => mockProcess.stdout,
+          ).thenAnswer((_) => Stream.value(utf8.encode('info')));
+          when(
+            () => mockProcess.stderr,
+          ).thenAnswer((_) => Stream.value(utf8.encode('error')));
+
+          return mockProcess;
+        });
+        await expectLater(
+          () => runWithOverrides(
+            () => aotTools.link(
+              base: base,
+              patch: patch,
+              analyzeSnapshot: analyzeSnapshot,
+              genSnapshot: genSnapshot,
+              kernel: kernel,
+              outputPath: outputPath,
+            ),
+          ),
+          throwsA(
+            isA<AotToolsExecutionFailure>().having(
+              (e) => '$e',
+              'toString',
+              contains('''
+stdout: info
+stderr: error'''),
+            ),
+          ),
+        );
+      });
+
+      group('when aot-tools is an executable', () {
+        const aotToolsPath = 'aot_tools';
+
+        setUp(() {
+          when(
+            () => quickpatchArtifacts.getArtifactPath(
+              artifact: QuickPatchArtifact.aotTools,
+            ),
+          ).thenReturn(aotToolsPath);
+        });
+
+        test('links and exits with code 0', () async {
+          when(
+            () => process.run(
+              aotToolsPath,
+              any(),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenAnswer((_) async {
+            return const QuickPatchProcessResult(
+              exitCode: 0,
+              stdout: '',
+              stderr: '',
+            );
+          });
+          when(
+            () => process.start(
+              aotToolsPath,
+              any(),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenAnswer((_) async {
+            final mockProcess = MockProcess();
+            when(() => mockProcess.exitCode).thenAnswer((_) async => 0);
+            when(
+              () => mockProcess.stdout,
+            ).thenAnswer((_) => const Stream.empty());
+            when(
+              () => mockProcess.stderr,
+            ).thenAnswer((_) => const Stream.empty());
+
+            return mockProcess;
+          });
+          await expectLater(
+            runWithOverrides(
+              () => aotTools.link(
+                base: base,
+                patch: patch,
+                analyzeSnapshot: analyzeSnapshot,
+                genSnapshot: genSnapshot,
+                kernel: kernel,
+                workingDirectory: workingDirectory.path,
+                outputPath: outputPath,
+              ),
+            ),
+            completes,
+          );
+          verify(
+            () => process.start(aotToolsPath, [
+              'link',
+              '--base=$base',
+              '--patch=$patch',
+              '--analyze-snapshot=$analyzeSnapshot',
+              '--output=$outputPath',
+              '--verbose',
+            ], workingDirectory: any(named: 'workingDirectory')),
+          ).called(1);
+        });
+
+        test('passes additional args to underlying process', () async {
+          when(
+            () => process.run(
+              aotToolsPath,
+              any(),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenAnswer((_) async {
+            return const QuickPatchProcessResult(
+              exitCode: 0,
+              stdout: '',
+              stderr: '',
+            );
+          });
+          when(
+            () => process.start(
+              aotToolsPath,
+              any(),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenAnswer((_) async {
+            final mockProcess = MockProcess();
+            when(() => mockProcess.exitCode).thenAnswer((_) async => 0);
+            when(
+              () => mockProcess.stdout,
+            ).thenAnswer((_) => const Stream.empty());
+            when(
+              () => mockProcess.stderr,
+            ).thenAnswer((_) => const Stream.empty());
+
+            return mockProcess;
+          });
+          await expectLater(
+            runWithOverrides(
+              () => aotTools.link(
+                base: base,
+                patch: patch,
+                analyzeSnapshot: analyzeSnapshot,
+                genSnapshot: genSnapshot,
+                kernel: kernel,
+                workingDirectory: workingDirectory.path,
+                outputPath: outputPath,
+                additionalArgs: ['--foo', 'bar'],
+              ),
+            ),
+            completes,
+          );
+          verify(
+            () => process.start(aotToolsPath, [
+              'link',
+              '--base=$base',
+              '--patch=$patch',
+              '--analyze-snapshot=$analyzeSnapshot',
+              '--output=$outputPath',
+              '--verbose',
+              '--',
+              '--foo',
+              'bar',
+            ], workingDirectory: any(named: 'workingDirectory')),
+          ).called(1);
+        });
+
+        test('forwards stdout from aot_tools link to the logger', () async {
+          when(
+            () => process.start(
+              aotToolsPath,
+              any(),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenAnswer((_) async {
+            final mockProcess = MockProcess();
+            when(() => mockProcess.exitCode).thenAnswer((_) async => 0);
+            when(
+              () => mockProcess.stdout,
+            ).thenAnswer((_) => Stream.value(utf8.encode('stdout')));
+            when(
+              () => mockProcess.stderr,
+            ).thenAnswer((_) => const Stream.empty());
+
+            return mockProcess;
+          });
+
+          await runWithOverrides(
+            () => aotTools.link(
+              base: base,
+              patch: patch,
+              analyzeSnapshot: analyzeSnapshot,
+              genSnapshot: genSnapshot,
+              kernel: kernel,
+              workingDirectory: workingDirectory.path,
+              outputPath: outputPath,
+            ),
+          );
+
+          // One for --version and one for the link command.
+          verify(() => logger.detail('stdout')).called(2);
+        });
+      });
+
+      group('when --dump-debug-info is provided', () {
+        const aotToolsPath = 'aot_tools';
+
+        setUp(() {
+          when(
+            () => quickpatchArtifacts.getArtifactPath(
+              artifact: QuickPatchArtifact.aotTools,
+            ),
+          ).thenReturn(aotToolsPath);
+        });
+
+        test('forwards the option to aot_tools', () async {
+          const debugPath = 'my_debug_path';
+          when(
+            () => process.run(
+              aotToolsPath,
+              any(),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenAnswer(
+            (_) async => const QuickPatchProcessResult(
+              exitCode: 0,
+              stdout: '',
+              stderr: '',
+            ),
+          );
+          when(
+            () => process.start(
+              aotToolsPath,
+              any(),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenAnswer((_) async {
+            final mockProcess = MockProcess();
+            when(() => mockProcess.exitCode).thenAnswer((_) async => 0);
+            when(
+              () => mockProcess.stdout,
+            ).thenAnswer((_) => const Stream.empty());
+            when(
+              () => mockProcess.stderr,
+            ).thenAnswer((_) => const Stream.empty());
+
+            return mockProcess;
+          });
+          await expectLater(
+            runWithOverrides(
+              () => aotTools.link(
+                base: base,
+                patch: patch,
+                analyzeSnapshot: analyzeSnapshot,
+                genSnapshot: genSnapshot,
+                kernel: kernel,
+                workingDirectory: workingDirectory.path,
+                outputPath: outputPath,
+                dumpDebugInfoPath: debugPath,
+              ),
+            ),
+            completes,
+          );
+          verify(
+            () => process.start(aotToolsPath, [
+              'link',
+              '--base=$base',
+              '--patch=$patch',
+              '--analyze-snapshot=$analyzeSnapshot',
+              '--output=$outputPath',
+              '--verbose',
+              '--dump-debug-info=$debugPath',
+            ], workingDirectory: any(named: 'workingDirectory')),
+          ).called(1);
+        });
+      });
+
+      group('when aot-tools is a kernel file', () {
+        const aotToolsPath = 'aot_tools.dill';
+
+        setUp(() {
+          when(
+            () => quickpatchArtifacts.getArtifactPath(
+              artifact: QuickPatchArtifact.aotTools,
+            ),
+          ).thenReturn(aotToolsPath);
+        });
+
+        test('links and exits with code 0', () async {
+          when(
+            () => process.run(
+              dartBinaryFile.path,
+              any(),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenAnswer(
+            (_) async => const QuickPatchProcessResult(
+              exitCode: 0,
+              stdout: '',
+              stderr: '',
+            ),
+          );
+          when(
+            () => process.start(
+              dartBinaryFile.path,
+              any(),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenAnswer((_) async {
+            final mockProcess = MockProcess();
+            when(() => mockProcess.exitCode).thenAnswer((_) async => 0);
+            when(
+              () => mockProcess.stdout,
+            ).thenAnswer((_) => const Stream.empty());
+            when(
+              () => mockProcess.stderr,
+            ).thenAnswer((_) => const Stream.empty());
+            return mockProcess;
+          });
+          await expectLater(
+            runWithOverrides(
+              () => aotTools.link(
+                base: base,
+                patch: patch,
+                analyzeSnapshot: analyzeSnapshot,
+                genSnapshot: genSnapshot,
+                kernel: kernel,
+                workingDirectory: workingDirectory.path,
+                outputPath: outputPath,
+              ),
+            ),
+            completes,
+          );
+          verify(
+            () => process.start(dartBinaryFile.path, [
+              'run',
+              aotToolsPath,
+              'link',
+              '--base=$base',
+              '--patch=$patch',
+              '--analyze-snapshot=$analyzeSnapshot',
+              '--output=$outputPath',
+              '--verbose',
+            ], workingDirectory: any(named: 'workingDirectory')),
+          ).called(1);
+        });
+      });
+
+      group('when aot_tools is a dart file', () {
+        const aotToolsPath = 'aot_tools.dart';
+
+        setUp(() {
+          when(
+            () => quickpatchArtifacts.getArtifactPath(
+              artifact: QuickPatchArtifact.aotTools,
+            ),
+          ).thenReturn(aotToolsPath);
+        });
+
+        test('links and exits with code 0', () async {
+          when(
+            () => process.run(
+              any(),
+              any(),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenAnswer(
+            (_) async => const QuickPatchProcessResult(
+              exitCode: 0,
+              stdout: '',
+              stderr: '',
+            ),
+          );
+          when(
+            () => process.start(
+              any(),
+              any(),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenAnswer((_) async {
+            final mockProcess = MockProcess();
+            when(() => mockProcess.exitCode).thenAnswer((_) async => 0);
+            when(
+              () => mockProcess.stdout,
+            ).thenAnswer((_) => const Stream.empty());
+            when(
+              () => mockProcess.stderr,
+            ).thenAnswer((_) => const Stream.empty());
+
+            return mockProcess;
+          });
+          await expectLater(
+            runWithOverrides(
+              () => aotTools.link(
+                base: base,
+                patch: patch,
+                analyzeSnapshot: analyzeSnapshot,
+                genSnapshot: genSnapshot,
+                kernel: kernel,
+                workingDirectory: workingDirectory.path,
+                outputPath: outputPath,
+              ),
+            ),
+            completes,
+          );
+          verify(
+            () => process.start(dartBinaryFile.path, [
+              'run',
+              aotToolsPath,
+              'link',
+              '--base=$base',
+              '--patch=$patch',
+              '--analyze-snapshot=$analyzeSnapshot',
+              '--output=$outputPath',
+              '--verbose',
+            ], workingDirectory: any(named: 'workingDirectory')),
+          ).called(1);
+        });
+      });
+
+      group('when when link expects gen_snapshot', () {
+        const aotToolsPath = 'aot_tools';
+
+        setUp(() {
+          when(
+            () => quickpatchArtifacts.getArtifactPath(
+              artifact: QuickPatchArtifact.aotTools,
+            ),
+          ).thenReturn(aotToolsPath);
+        });
+
+        test('passes gen_snapshot to aot_tools', () async {
+          when(
+            () => process.start(aotToolsPath, [
+              '--version',
+            ], workingDirectory: any(named: 'workingDirectory')),
+          ).thenAnswer((_) async {
+            final mockProcess = MockProcess();
+            when(() => mockProcess.exitCode).thenAnswer((_) async => 0);
+            when(
+              () => mockProcess.stdout,
+            ).thenAnswer((_) => Stream.value(utf8.encode('0.0.1')));
+            when(
+              () => mockProcess.stderr,
+            ).thenAnswer((_) => const Stream.empty());
+            return mockProcess;
+          });
+          when(
+            () => process.start(
+              aotToolsPath,
+              any(that: contains('--gen-snapshot=$genSnapshot')),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenAnswer((_) async {
+            final mockProcess = MockProcess();
+            when(() => mockProcess.exitCode).thenAnswer((_) async => 0);
+            when(
+              () => mockProcess.stdout,
+            ).thenAnswer((_) => const Stream.empty());
+            when(
+              () => mockProcess.stderr,
+            ).thenAnswer((_) => const Stream.empty());
+
+            return mockProcess;
+          });
+          await expectLater(
+            runWithOverrides(
+              () => aotTools.link(
+                base: base,
+                patch: patch,
+                analyzeSnapshot: analyzeSnapshot,
+                genSnapshot: genSnapshot,
+                kernel: kernel,
+                workingDirectory: workingDirectory.path,
+                outputPath: outputPath,
+              ),
+            ),
+            completes,
+          );
+
+          verify(
+            () => process.start(aotToolsPath, [
+              'link',
+              '--base=$base',
+              '--patch=$patch',
+              '--analyze-snapshot=$analyzeSnapshot',
+              '--output=$outputPath',
+              '--verbose',
+              '--gen-snapshot=$genSnapshot',
+              '--kernel=$kernel',
+              '--reporter=json',
+              '--redirect-to=$linkJsonPath',
+            ], workingDirectory: any(named: 'workingDirectory')),
+          ).called(1);
+        });
+
+        test('returns link percentage', () async {
+          workingDirectory = Directory.systemTemp.createTempSync();
+          when(
+            () => process.start(aotToolsPath, [
+              '--version',
+            ], workingDirectory: any(named: 'workingDirectory')),
+          ).thenAnswer((_) async {
+            final mockProcess = MockProcess();
+            when(() => mockProcess.exitCode).thenAnswer((_) async => 0);
+            when(
+              () => mockProcess.stdout,
+            ).thenAnswer((_) => Stream.value(utf8.encode('0.0.1')));
+            when(
+              () => mockProcess.stderr,
+            ).thenAnswer((_) => const Stream.empty());
+            return mockProcess;
+          });
+          when(
+            () => process.start(
+              aotToolsPath,
+              any(that: contains('--gen-snapshot=$genSnapshot')),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenAnswer((_) async {
+            File(p.join(workingDirectory.path, 'link.jsonl')).writeAsStringSync(
+              '''
+{"type":"link_success","base_codes_length":3036,"patch_codes_length":3036,"base_code_size":861816,"patch_code_size":861816,"linked_code_size":860460,"link_percentage":99.8426578295135}
+{"type":"link_debug","message":"wrote vmcode file to out.vmcode"}''',
+            );
+
+            final mockProcess = MockProcess();
+            when(() => mockProcess.exitCode).thenAnswer((_) async => 0);
+            when(
+              () => mockProcess.stdout,
+            ).thenAnswer((_) => const Stream.empty());
+            when(
+              () => mockProcess.stderr,
+            ).thenAnswer((_) => const Stream.empty());
+
+            return mockProcess;
+          });
+          await expectLater(
+            runWithOverrides(
+              () => aotTools.link(
+                base: base,
+                patch: patch,
+                analyzeSnapshot: analyzeSnapshot,
+                genSnapshot: genSnapshot,
+                kernel: kernel,
+                workingDirectory: workingDirectory.path,
+                outputPath: outputPath,
+              ),
+            ),
+            completion(equals(99.8426578295135)),
+          );
+
+          verify(
+            () => process.start(aotToolsPath, [
+              'link',
+              '--base=$base',
+              '--patch=$patch',
+              '--analyze-snapshot=$analyzeSnapshot',
+              '--output=$outputPath',
+              '--verbose',
+              '--gen-snapshot=$genSnapshot',
+              '--kernel=$kernel',
+              '--reporter=json',
+              '--redirect-to=$linkJsonPath',
+            ], workingDirectory: any(named: 'workingDirectory')),
+          ).called(1);
+        });
+
+        test(
+          'throws LinkFailureException with hint on VM data mismatch',
+          () async {
+            workingDirectory = Directory.systemTemp.createTempSync();
+            when(
+              () => process.start(aotToolsPath, [
+                '--version',
+              ], workingDirectory: any(named: 'workingDirectory')),
+            ).thenAnswer((_) async {
+              final mockProcess = MockProcess();
+              when(() => mockProcess.exitCode).thenAnswer((_) async => 0);
+              when(
+                () => mockProcess.stdout,
+              ).thenAnswer((_) => Stream.value(utf8.encode('0.0.1')));
+              when(
+                () => mockProcess.stderr,
+              ).thenAnswer((_) => const Stream.empty());
+              return mockProcess;
+            });
+            when(
+              () => process.run(
+                aotToolsPath,
+                any(that: contains('--gen-snapshot=$genSnapshot')),
+                workingDirectory: any(named: 'workingDirectory'),
+              ),
+            ).thenAnswer(
+              (_) async => const QuickPatchProcessResult(
+                exitCode: 1,
+                stdout: '',
+                stderr: 'error',
+              ),
+            );
+            when(
+              () => process.start(
+                aotToolsPath,
+                any(that: contains('--gen-snapshot=$genSnapshot')),
+                workingDirectory: any(named: 'workingDirectory'),
+              ),
+            ).thenAnswer((_) async {
+              final linkFailure = jsonEncode({
+                'type': 'link_failure',
+                'reason': 'base and patch snapshots have differing VM sections',
+                'details': {
+                  'vm_data_length': {'base': 39296, 'patch': 39296},
+                  'vm_instructions_length': {'base': 65280, 'patch': 65280},
+                  'vm_data_hash': {'base': 4272422645, 'patch': 2308514119},
+                  'vm_instructions_hash': {
+                    'base': 1550369841,
+                    'patch': 1550369841,
+                  },
+                },
+              });
+              File(
+                p.join(workingDirectory.path, 'link.jsonl'),
+              ).writeAsStringSync('$linkFailure\n');
+
+              final mockProcess = MockProcess();
+              when(() => mockProcess.exitCode).thenAnswer((_) async => 1);
+              when(
+                () => mockProcess.stdout,
+              ).thenAnswer((_) => const Stream.empty());
+              when(
+                () => mockProcess.stderr,
+              ).thenAnswer((_) => Stream.value(utf8.encode('error')));
+              return mockProcess;
+            });
+
+            await expectLater(
+              runWithOverrides(
+                () => aotTools.link(
+                  base: base,
+                  patch: patch,
+                  analyzeSnapshot: analyzeSnapshot,
+                  genSnapshot: genSnapshot,
+                  kernel: kernel,
+                  workingDirectory: workingDirectory.path,
+                  outputPath: outputPath,
+                ),
+              ),
+              throwsA(
+                isA<LinkFailureException>()
+                    .having(
+                      (e) => '$e',
+                      'toString',
+                      contains('differing VM sections'),
+                    )
+                    .having(
+                      (e) => e.hint,
+                      'hint',
+                      allOf(
+                        contains('--dart-define'),
+                        contains('--obfuscate'),
+                      ),
+                    ),
+              ),
+            );
+          },
+        );
+
+        test(
+          'rethrows AotToolsExecutionFailure when jsonl is malformed',
+          () async {
+            workingDirectory = Directory.systemTemp.createTempSync();
+            when(
+              () => process.start(aotToolsPath, [
+                '--version',
+              ], workingDirectory: any(named: 'workingDirectory')),
+            ).thenAnswer((_) async {
+              final mockProcess = MockProcess();
+              when(() => mockProcess.exitCode).thenAnswer((_) async => 0);
+              when(
+                () => mockProcess.stdout,
+              ).thenAnswer((_) => Stream.value(utf8.encode('0.0.1')));
+              when(
+                () => mockProcess.stderr,
+              ).thenAnswer((_) => const Stream.empty());
+              return mockProcess;
+            });
+            when(
+              () => process.start(
+                aotToolsPath,
+                any(that: contains('--gen-snapshot=$genSnapshot')),
+                workingDirectory: any(named: 'workingDirectory'),
+              ),
+            ).thenAnswer((_) async {
+              File(
+                p.join(workingDirectory.path, 'link.jsonl'),
+              ).writeAsStringSync('this is not json\n');
+
+              final mockProcess = MockProcess();
+              when(() => mockProcess.exitCode).thenAnswer((_) async => 1);
+              when(
+                () => mockProcess.stdout,
+              ).thenAnswer((_) => const Stream.empty());
+              when(
+                () => mockProcess.stderr,
+              ).thenAnswer((_) => Stream.value(utf8.encode('boom')));
+              return mockProcess;
+            });
+
+            await expectLater(
+              runWithOverrides(
+                () => aotTools.link(
+                  base: base,
+                  patch: patch,
+                  analyzeSnapshot: analyzeSnapshot,
+                  genSnapshot: genSnapshot,
+                  kernel: kernel,
+                  workingDirectory: workingDirectory.path,
+                  outputPath: outputPath,
+                ),
+              ),
+              throwsA(isA<AotToolsExecutionFailure>()),
+            );
+          },
+        );
+
+        test(
+          'rethrows AotToolsExecutionFailure when no link_failure event',
+          () async {
+            workingDirectory = Directory.systemTemp.createTempSync();
+            when(
+              () => process.start(aotToolsPath, [
+                '--version',
+              ], workingDirectory: any(named: 'workingDirectory')),
+            ).thenAnswer((_) async {
+              final mockProcess = MockProcess();
+              when(() => mockProcess.exitCode).thenAnswer((_) async => 0);
+              when(
+                () => mockProcess.stdout,
+              ).thenAnswer((_) => Stream.value(utf8.encode('0.0.1')));
+              when(
+                () => mockProcess.stderr,
+              ).thenAnswer((_) => const Stream.empty());
+              return mockProcess;
+            });
+            when(
+              () => process.start(
+                aotToolsPath,
+                any(that: contains('--gen-snapshot=$genSnapshot')),
+                workingDirectory: any(named: 'workingDirectory'),
+              ),
+            ).thenAnswer((_) async {
+              // No link.jsonl written — simulates a crash before reporting.
+              final mockProcess = MockProcess();
+              when(() => mockProcess.exitCode).thenAnswer((_) async => 1);
+              when(
+                () => mockProcess.stdout,
+              ).thenAnswer((_) => const Stream.empty());
+              when(
+                () => mockProcess.stderr,
+              ).thenAnswer((_) => Stream.value(utf8.encode('boom')));
+              return mockProcess;
+            });
+
+            await expectLater(
+              runWithOverrides(
+                () => aotTools.link(
+                  base: base,
+                  patch: patch,
+                  analyzeSnapshot: analyzeSnapshot,
+                  genSnapshot: genSnapshot,
+                  kernel: kernel,
+                  workingDirectory: workingDirectory.path,
+                  outputPath: outputPath,
+                ),
+              ),
+              throwsA(isA<AotToolsExecutionFailure>()),
+            );
+          },
+        );
+      });
+
+      group('isLinkDebugInfoSupported', () {
+        test('returns true when the argument is present in the help', () async {
+          when(
+            () => process.start(
+              any(),
+              any(),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenAnswer((_) async {
+            final mockProcess = MockProcess();
+            when(() => mockProcess.exitCode).thenAnswer((_) async => 0);
+            when(() => mockProcess.stdout).thenAnswer(
+              (_) => Stream.value(
+                utf8.encode('''
+Link two aot snapshots.
+
+Usage: aot_tools link [arguments]
+-h, --help                            Print this usage information.
+    --base (mandatory)                Path to the base snapshot to link against.
+    --patch (mandatory)               Path to the patch snapshot to link.
+    --analyze-snapshot (mandatory)    Path to analyze_snapshot binary.
+    --gen-snapshot (mandatory)        Path to gen_snapshot binary.
+    --kernel (mandatory)              Path to the patch kernel (.dill) file.
+    --output (mandatory)              Path to the output vmcode file.
+    --enable-asserts                  Whether to enable asserts.
+    --linker-overrides                Path to the linker overrides json file.
+    --dump-debug-info                 When specified, debug information will be generated and written to the provided path.
+    --reporter                        Set how to print link results.
+
+          [json]                      Prints the results in json format.
+          [pretty] (default)          Prints the results in a human readable format.
+
+    --redirect-to                     Redirect output to a file.
+
+Run "aot_tools help" to see global options.
+'''),
+              ),
+            );
+            when(
+              () => mockProcess.stderr,
+            ).thenAnswer((_) => const Stream.empty());
+            return mockProcess;
+          });
+
+          await expectLater(
+            runWithOverrides(() => aotTools.isLinkDebugInfoSupported()),
+            completion(isTrue),
+          );
+        });
+
+        test(
+          'returns false when the argument is not present in the help',
+          () async {
+            when(
+              () => process.start(
+                any(),
+                any(),
+                workingDirectory: any(named: 'workingDirectory'),
+              ),
+            ).thenAnswer((_) async {
+              final mockProcess = MockProcess();
+              when(() => mockProcess.exitCode).thenAnswer((_) async => 0);
+              when(() => mockProcess.stdout).thenAnswer(
+                (_) => Stream.value(
+                  utf8.encode('''
+Link two aot snapshots.
+
+Usage: aot_tools link [arguments]
+-h, --help                            Print this usage information.
+    --base (mandatory)                Path to the base snapshot to link against.
+    --patch (mandatory)               Path to the patch snapshot to link.
+    --analyze-snapshot (mandatory)    Path to analyze_snapshot binary.
+    --gen-snapshot (mandatory)        Path to gen_snapshot binary.
+    --kernel (mandatory)              Path to the patch kernel (.dill) file.
+    --output (mandatory)              Path to the output vmcode file.
+    --enable-asserts                  Whether to enable asserts.
+    --linker-overrides                Path to the linker overrides json file.
+    --reporter                        Set how to print link results.
+
+          [json]                      Prints the results in json format.
+          [pretty] (default)          Prints the results in a human readable format.
+
+    --redirect-to                     Redirect output to a file.
+
+Run "aot_tools help" to see global options.
+'''),
+                ),
+              );
+              when(
+                () => mockProcess.stderr,
+              ).thenAnswer((_) => const Stream.empty());
+              return mockProcess;
+            });
+
+            await expectLater(
+              runWithOverrides(() => aotTools.isLinkDebugInfoSupported()),
+              completion(isFalse),
+            );
+          },
+        );
+      });
+    });
+
+    group('isGeneratePatchDiffBaseSupported', () {
+      var stdout = '';
+      setUp(() {
+        when(
+          () => process.start(
+            dartBinaryFile.path,
+            any(),
+            workingDirectory: any(named: 'workingDirectory'),
+          ),
+        ).thenAnswer((_) async {
+          final mockProcess = MockProcess();
+          when(() => mockProcess.exitCode).thenAnswer((_) async => 0);
+          when(
+            () => mockProcess.stdout,
+          ).thenAnswer((_) => Stream.value(utf8.encode(stdout)));
+          when(
+            () => mockProcess.stderr,
+          ).thenAnswer((_) => const Stream.empty());
+          return mockProcess;
+        });
+      });
+
+      group('when dump_blobs flag is not recognized', () {
+        setUp(() {
+          stdout = '''
+Dart equivalent of bintools
+
+Usage: aot_tools <command> [arguments]
+
+Global options:
+-h, --help       Print this usage information.
+-v, --verbose    Noisy logging.
+
+Available commands:
+  link   Link two aot snapshots.
+
+Run "aot_tools help <command>" for more information about a command.
+''';
+        });
+
+        test('returns false', () async {
+          final result = await runWithOverrides(
+            () => aotTools.isGeneratePatchDiffBaseSupported(),
+          );
+          expect(result, isFalse);
+        });
+      });
+
+      group('when dump_blobs is recognized', () {
+        setUp(() {
+          stdout = '''
+Dart equivalent of bintools
+
+Usage: aot_tools <command> [arguments]
+
+Global options:
+-h, --help            Print this usage information.
+-v, --[no-]verbose    Noisy logging.
+
+Available commands:
+  dump_blobs              Reads the isolate and vm snapshot data from an aot snapshot file, concatenates them, and writes them to the specified out path.
+  dump_linker_overrides   Statically analyzes dart code and dumps the overrides to the specified output path.
+  link                    Link two aot snapshots.
+
+Run "aot_tools help <command>" for more information about a command.
+''';
+        });
+
+        test('returns true', () async {
+          final result = await runWithOverrides(
+            () => aotTools.isGeneratePatchDiffBaseSupported(),
+          );
+          expect(result, isTrue);
+        });
+      });
+    });
+
+    group('generatePatchDiffBase', () {
+      late int exitCode;
+      late String stdout;
+      late String stderr;
+
+      setUp(() {
+        exitCode = 0;
+        stdout = '';
+        stderr = '';
+        when(
+          () => process.start(
+            any(),
+            any(),
+            workingDirectory: any(named: 'workingDirectory'),
+          ),
+        ).thenAnswer((_) async {
+          final mockProcess = MockProcess();
+          when(() => mockProcess.exitCode).thenAnswer((_) async => exitCode);
+          when(
+            () => mockProcess.stdout,
+          ).thenAnswer((_) => Stream.value(utf8.encode(stdout)));
+          when(
+            () => mockProcess.stderr,
+          ).thenAnswer((_) => Stream.value(utf8.encode(stderr)));
+          return mockProcess;
+        });
+      });
+
+      group('when command returns non-zero exit code', () {
+        setUp(() {
+          exitCode = 1;
+          stderr = 'error';
+        });
+
+        test('throws exception', () async {
+          await expectLater(
+            () => runWithOverrides(
+              () => aotTools.generatePatchDiffBase(
+                releaseSnapshot: File('release_snapshot'),
+                analyzeSnapshotPath: 'analyze_snapshot',
+              ),
+            ),
+            throwsA(
+              isA<AotToolsExecutionFailure>().having(
+                (e) => '$e',
+                'toString',
+                contains('stderr: error'),
+              ),
+            ),
+          );
+        });
+      });
+
+      group('when out file does not exist', () {
+        test('throws exception', () async {
+          await expectLater(
+            () => runWithOverrides(
+              () => aotTools.generatePatchDiffBase(
+                releaseSnapshot: File('release_snapshot'),
+                analyzeSnapshotPath: 'analyze_snapshot',
+              ),
+            ),
+            throwsA(
+              isA<Exception>().having(
+                (e) => '$e',
+                'exception',
+                '''Exception: Failed to generate patch diff base: output file does not exist''',
+              ),
+            ),
+          );
+        });
+      });
+
+      group('when out file is created', () {
+        setUp(() {
+          when(
+            () => process.start(
+              any(),
+              any(),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenAnswer((invocation) async {
+            final outArgument =
+                (invocation.positionalArguments.last as List<String>)
+                    .firstWhere((String element) => element.startsWith('--out'))
+                    .split('=')
+                    .last;
+            File(outArgument).createSync(recursive: true);
+            final mockProcess = MockProcess();
+            when(() => mockProcess.exitCode).thenAnswer((_) async => exitCode);
+            when(
+              () => mockProcess.stdout,
+            ).thenAnswer((_) => Stream.value(utf8.encode(stdout)));
+            when(
+              () => mockProcess.stderr,
+            ).thenAnswer((_) => Stream.value(utf8.encode(stderr)));
+            return mockProcess;
+          });
+        });
+
+        test('returns path to file', () async {
+          final result = await runWithOverrides(
+            () => aotTools.generatePatchDiffBase(
+              releaseSnapshot: File('release_snapshot'),
+              analyzeSnapshotPath: 'analyze_snapshot',
+            ),
+          );
+
+          expect(result.existsSync(), isTrue);
+        });
+      });
+
+      group('getLinkMetadata', () {
+        late int exitCode;
+        late String stdout;
+        late String stderr;
+
+        setUp(() {
+          stdout = '';
+          stderr = '';
+          exitCode = 0;
+          when(
+            () => process.start(
+              any(),
+              any(),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenAnswer((_) async {
+            final mockProcess = MockProcess();
+            when(() => mockProcess.exitCode).thenAnswer((_) async => exitCode);
+            when(
+              () => mockProcess.stdout,
+            ).thenAnswer((_) => Stream.value(utf8.encode(stdout)));
+            when(
+              () => mockProcess.stderr,
+            ).thenAnswer((_) => Stream.value(utf8.encode(stderr)));
+            return mockProcess;
+          });
+          when(
+            () => process.start(
+              any(),
+              any(),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenAnswer((_) async {
+            final mockProcess = MockProcess();
+            when(() => mockProcess.exitCode).thenAnswer((_) async => exitCode);
+            when(
+              () => mockProcess.stdout,
+            ).thenAnswer((_) => Stream.value(utf8.encode(stdout)));
+            when(
+              () => mockProcess.stderr,
+            ).thenAnswer((_) => Stream.value(utf8.encode(stderr)));
+            return mockProcess;
+          });
+        });
+
+        test(
+          'returns link metadata when aot_tools executes successfully',
+          () async {
+            stdout = '{}';
+            final result = await runWithOverrides(
+              () => aotTools.getLinkMetadata(debugDir: '/debug'),
+            );
+            expect(result, isA<Map<String, dynamic>>());
+          },
+        );
+
+        test(
+          'throws FormatException when aot_tools outputs invalid json',
+          () async {
+            stdout = 'invalid';
+            await expectLater(
+              () => runWithOverrides(
+                () => aotTools.getLinkMetadata(debugDir: '/debug'),
+              ),
+              throwsFormatException,
+            );
+          },
+        );
+      });
+    });
+
+    group('getVersion', () {
+      late int exitCode;
+      late String stdout;
+      late String stderr;
+
+      setUp(() {
+        exitCode = 0;
+        stdout = '';
+        stderr = '';
+        when(
+          () => process.start(
+            any(),
+            any(),
+            workingDirectory: any(named: 'workingDirectory'),
+          ),
+        ).thenAnswer((_) async {
+          final mockProcess = MockProcess();
+          when(() => mockProcess.exitCode).thenAnswer((_) async => exitCode);
+          when(
+            () => mockProcess.stdout,
+          ).thenAnswer((_) => Stream.value(utf8.encode(stdout)));
+          when(
+            () => mockProcess.stderr,
+          ).thenAnswer((_) => Stream.value(utf8.encode(stderr)));
+          return mockProcess;
+        });
+      });
+
+      test(
+        'returns parsed version when aot_tools outputs valid version',
+        () async {
+          stdout = '1.2.3';
+          final result = await runWithOverrides(() => aotTools.getVersion());
+          expect(result, Version(1, 2, 3));
+        },
+      );
+
+      test('returns 0.0.0 when process exits with non-zero code', () async {
+        exitCode = 1;
+        stderr = 'error';
+        final result = await runWithOverrides(() => aotTools.getVersion());
+        expect(result, Version(0, 0, 0));
+      });
+
+      test('returns 0.0.0 when version string is invalid', () async {
+        stdout = 'invalid version';
+        final result = await runWithOverrides(() => aotTools.getVersion());
+        expect(result, Version(0, 0, 0));
+      });
+
+      test('removes build hooks prefix from version output', () async {
+        stdout = 'Running build hooks...\n1.2.3';
+        final result = await runWithOverrides(() => aotTools.getVersion());
+        expect(result, Version(1, 2, 3));
+      });
+
+      test('handles version with trailing whitespace', () async {
+        stdout = '1.2.3   \n';
+        final result = await runWithOverrides(() => aotTools.getVersion());
+        expect(result, Version(1, 2, 3));
+      });
+    });
+
+    group('build trace wiring', () {
+      test(
+        'prepends --trace=<path> to the subcommand when session has a '
+        'trace file set',
+        () async {
+          final tempDir = Directory.systemTemp.createTempSync();
+          addTearDown(() => tempDir.deleteSync(recursive: true));
+          final traceFile = File(p.join(tempDir.path, 'trace.json'));
+
+          when(
+            () => process.start(
+              any(),
+              any(),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenAnswer((_) async {
+            final mockProcess = MockProcess();
+            when(() => mockProcess.exitCode).thenAnswer((_) async => 0);
+            when(
+              () => mockProcess.stdout,
+            ).thenAnswer((_) => Stream.value(utf8.encode('1.2.3')));
+            when(
+              () => mockProcess.stderr,
+            ).thenAnswer((_) => const Stream<List<int>>.empty());
+            return mockProcess;
+          });
+
+          final session = BuildTraceSession(
+            commandStartedAt: DateTime(2023),
+          )..traceFile = traceFile;
+
+          await runWithOverrides(
+            () => aotTools.getVersion(),
+            traceSession: session,
+          );
+
+          final captured =
+              verify(
+                    () => process.start(
+                      dartBinaryFile.path,
+                      captureAny(),
+                      workingDirectory: any(named: 'workingDirectory'),
+                    ),
+                  ).captured.single
+                  as List<String>;
+          // Expect: dart run <aotTools> --trace=<path> --version
+          expect(captured.length, 4);
+          expect(captured[0], 'run');
+          expect(captured[1], 'aot-tools.dill');
+          expect(captured[2], '--trace=${traceFile.path}');
+          expect(captured[3], '--version');
+        },
+      );
+
+      test(
+        'omits --trace when session has no trace file set',
+        () async {
+          when(
+            () => process.start(
+              any(),
+              any(),
+              workingDirectory: any(named: 'workingDirectory'),
+            ),
+          ).thenAnswer((_) async {
+            final mockProcess = MockProcess();
+            when(() => mockProcess.exitCode).thenAnswer((_) async => 0);
+            when(
+              () => mockProcess.stdout,
+            ).thenAnswer((_) => Stream.value(utf8.encode('1.2.3')));
+            when(
+              () => mockProcess.stderr,
+            ).thenAnswer((_) => const Stream<List<int>>.empty());
+            return mockProcess;
+          });
+
+          await runWithOverrides(() => aotTools.getVersion());
+
+          final captured =
+              verify(
+                    () => process.start(
+                      dartBinaryFile.path,
+                      captureAny(),
+                      workingDirectory: any(named: 'workingDirectory'),
+                    ),
+                  ).captured.single
+                  as List<String>;
+          expect(captured.any((a) => a.startsWith('--trace=')), isFalse);
+        },
+      );
+    });
+  });
+
+  group(LinkFailureException, () {
+    const execFailure = AotToolsExecutionFailure(
+      exitCode: 1,
+      stdout: '',
+      stderr: '',
+      command: 'aot_tools link',
+    );
+
+    LinkFailureException build(Map<String, dynamic> linkFailure) =>
+        LinkFailureException(
+          execFailure: execFailure,
+          linkFailure: linkFailure,
+        );
+
+    group('hint', () {
+      test('is null when details is missing', () {
+        expect(build({'type': 'link_failure'}).hint, isNull);
+      });
+
+      test('is null when hash fields are not maps', () {
+        expect(
+          build({
+            'details': {'vm_data_hash': 'oops', 'vm_instructions_hash': 0},
+          }).hint,
+          isNull,
+        );
+      });
+
+      test('is null when instructions also differ', () {
+        expect(
+          build({
+            'details': {
+              'vm_data_hash': {'base': 1, 'patch': 2},
+              'vm_instructions_hash': {'base': 3, 'patch': 4},
+            },
+          }).hint,
+          isNull,
+        );
+      });
+
+      test('is null when data matches', () {
+        expect(
+          build({
+            'details': {
+              'vm_data_hash': {'base': 1, 'patch': 1},
+              'vm_instructions_hash': {'base': 2, 'patch': 2},
+            },
+          }).hint,
+          isNull,
+        );
+      });
+
+      test('is set for the VM-data-only mismatch signature', () {
+        final hint = build({
+          'details': {
+            'vm_data_hash': {'base': 1, 'patch': 2},
+            'vm_instructions_hash': {'base': 3, 'patch': 3},
+          },
+        }).hint;
+        expect(hint, isNotNull);
+        expect(hint, contains('--dart-define'));
+        expect(hint, contains('--obfuscate'));
+      });
+    });
+
+    group('toString', () {
+      test('uses a fallback reason when none is present', () {
+        expect(
+          build({}).toString(),
+          contains('aot_tools link reported a failure'),
+        );
+      });
+
+      test('includes the reason and underlying execFailure', () {
+        final out = build({'reason': 'nope'}).toString();
+        expect(out, contains('nope'));
+        expect(out, contains('aot_tools link failed with exit code 1'));
+      });
+    });
+  });
+}

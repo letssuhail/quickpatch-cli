@@ -1,0 +1,1157 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:args/args.dart';
+import 'package:crypto/crypto.dart';
+import 'package:mason_logger/mason_logger.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:path/path.dart' as p;
+import 'package:platform/platform.dart';
+import 'package:pub_semver/pub_semver.dart';
+import 'package:scoped_deps/scoped_deps.dart';
+import 'package:quickpatch_cli/src/artifact_builder/artifact_builder.dart';
+import 'package:quickpatch_cli/src/artifact_manager.dart';
+import 'package:quickpatch_cli/src/code_push_client_wrapper.dart';
+import 'package:quickpatch_cli/src/code_signer.dart';
+import 'package:quickpatch_cli/src/commands/release/ios_releaser.dart';
+import 'package:quickpatch_cli/src/common_arguments.dart';
+import 'package:quickpatch_cli/src/config/config.dart';
+import 'package:quickpatch_cli/src/doctor.dart';
+import 'package:quickpatch_cli/src/executables/xcodebuild.dart';
+import 'package:quickpatch_cli/src/logging/logging.dart';
+import 'package:quickpatch_cli/src/metadata/metadata.dart';
+import 'package:quickpatch_cli/src/os/operating_system_interface.dart';
+import 'package:quickpatch_cli/src/platform/apple/apple.dart';
+import 'package:quickpatch_cli/src/release_type.dart';
+import 'package:quickpatch_cli/src/quickpatch_env.dart';
+import 'package:quickpatch_cli/src/quickpatch_flutter.dart';
+import 'package:quickpatch_cli/src/quickpatch_process.dart';
+import 'package:quickpatch_cli/src/quickpatch_validator.dart';
+import 'package:quickpatch_cli/src/validators/validators.dart';
+import 'package:quickpatch_cli/src/version.dart';
+import 'package:quickpatch_code_push_client/quickpatch_code_push_client.dart';
+import 'package:test/test.dart';
+
+import '../../matchers.dart';
+import '../../mocks.dart';
+
+void main() {
+  group(IosReleaser, () {
+    late Apple apple;
+    late ArgResults argResults;
+    late ArtifactBuilder artifactBuilder;
+    late ArtifactManager artifactManager;
+    late CodePushClientWrapper codePushClientWrapper;
+    late CodeSigner codeSigner;
+    late Directory projectRoot;
+    late Doctor doctor;
+    late FlavorValidator flavorValidator;
+    late Progress progress;
+    late QuickPatchLogger logger;
+    late OperatingSystemInterface operatingSystemInterface;
+    late QuickPatchProcess quickpatchProcess;
+    late QuickPatchEnv quickpatchEnv;
+    late QuickPatchFlutter quickpatchFlutter;
+    late QuickPatchValidator quickpatchValidator;
+    late XcodeBuild xcodeBuild;
+    late IosReleaser iosReleaser;
+
+    R runWithOverrides<R>(R Function() body) {
+      return runScoped(
+        body,
+        values: {
+          appleRef.overrideWith(() => apple),
+          artifactBuilderRef.overrideWith(() => artifactBuilder),
+          artifactManagerRef.overrideWith(() => artifactManager),
+          codePushClientWrapperRef.overrideWith(() => codePushClientWrapper),
+          codeSignerRef.overrideWith(() => codeSigner),
+          doctorRef.overrideWith(() => doctor),
+          loggerRef.overrideWith(() => logger),
+          osInterfaceRef.overrideWith(() => operatingSystemInterface),
+          processRef.overrideWith(() => quickpatchProcess),
+          quickpatchEnvRef.overrideWith(() => quickpatchEnv),
+          quickpatchFlutterRef.overrideWith(() => quickpatchFlutter),
+          quickpatchValidatorRef.overrideWith(() => quickpatchValidator),
+          xcodeBuildRef.overrideWith(() => xcodeBuild),
+        },
+      );
+    }
+
+    setUpAll(() {
+      registerFallbackValue(Directory(''));
+      registerFallbackValue(File(''));
+      registerFallbackValue(ReleasePlatform.android);
+    });
+
+    setUp(() {
+      apple = MockApple();
+      argResults = MockArgResults();
+      artifactBuilder = MockArtifactBuilder();
+      artifactManager = MockArtifactManager();
+      codePushClientWrapper = MockCodePushClientWrapper();
+      codeSigner = MockCodeSigner();
+      doctor = MockDoctor();
+      flavorValidator = MockFlavorValidator();
+      projectRoot = Directory.systemTemp.createTempSync();
+      operatingSystemInterface = MockOperatingSystemInterface();
+      progress = MockProgress();
+      logger = MockQuickPatchLogger();
+      quickpatchProcess = MockQuickPatchProcess();
+      quickpatchEnv = MockQuickPatchEnv();
+      quickpatchFlutter = MockQuickPatchFlutter();
+      quickpatchValidator = MockQuickPatchValidator();
+      xcodeBuild = MockXcodeBuild();
+
+      when(() => argResults.rest).thenReturn([]);
+      when(() => argResults.wasParsed(any())).thenReturn(false);
+      when(() => argResults['flutter-version']).thenReturn('latest');
+
+      when(() => logger.progress(any())).thenReturn(progress);
+
+      iosReleaser = IosReleaser(
+        argResults: argResults,
+        flavor: null,
+        target: null,
+      );
+    });
+
+    group('releaseType', () {
+      test('is ios', () {
+        expect(iosReleaser.releaseType, ReleaseType.ios);
+      });
+    });
+
+    group('minimumFlutterVersion', () {
+      test('is 3.22.2', () {
+        expect(iosReleaser.minimumFlutterVersion, Version(3, 22, 2));
+      });
+    });
+
+    group('artifactDisplayName', () {
+      test('has expected value', () {
+        expect(iosReleaser.artifactDisplayName, 'iOS app');
+      });
+    });
+
+    group('assertPreconditions', () {
+      final flutterVersion = Version(3, 0, 0);
+
+      setUp(() {
+        when(() => doctor.iosCommandValidators).thenReturn([flavorValidator]);
+        when(
+          () => quickpatchFlutter.resolveFlutterVersion(any()),
+        ).thenAnswer((_) async => flutterVersion);
+        when(flavorValidator.validate).thenAnswer((_) async => []);
+      });
+
+      group('when validation succeeds', () {
+        setUp(() {
+          when(
+            () => quickpatchValidator.validatePreconditions(
+              checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
+              ),
+              validators: any(named: 'validators'),
+              supportedOperatingSystems: any(
+                named: 'supportedOperatingSystems',
+              ),
+            ),
+          ).thenAnswer((_) async {});
+        });
+
+        test('returns normally', () async {
+          await expectLater(
+            () => runWithOverrides(iosReleaser.assertPreconditions),
+            returnsNormally,
+          );
+        });
+      });
+
+      group('when validation fails', () {
+        final exception = ValidationFailedException();
+
+        setUp(() {
+          when(
+            () => quickpatchValidator.validatePreconditions(
+              checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
+              ),
+              validators: any(named: 'validators'),
+              supportedOperatingSystems: any(
+                named: 'supportedOperatingSystems',
+              ),
+            ),
+          ).thenThrow(exception);
+        });
+
+        test('exits with code 70', () async {
+          await expectLater(
+            () => runWithOverrides(iosReleaser.assertPreconditions),
+            exitsWithCode(exception.exitCode),
+          );
+          verify(
+            () => quickpatchValidator.validatePreconditions(
+              checkUserIsAuthenticated: true,
+              checkQuickPatchInitialized: true,
+              validators: [flavorValidator],
+              supportedOperatingSystems: {Platform.macOS},
+            ),
+          ).called(1);
+        });
+      });
+
+      group('when specified flutter version is less than minimum', () {
+        setUp(() {
+          when(
+            () => quickpatchValidator.validatePreconditions(
+              checkUserIsAuthenticated: any(named: 'checkUserIsAuthenticated'),
+              checkQuickPatchInitialized: any(
+                named: 'checkQuickPatchInitialized',
+              ),
+              validators: any(named: 'validators'),
+              supportedOperatingSystems: any(
+                named: 'supportedOperatingSystems',
+              ),
+            ),
+          ).thenAnswer((_) async {});
+          when(() => argResults['flutter-version']).thenReturn('3.0.0');
+        });
+      });
+    });
+
+    group('assertArgsAreValid', () {
+      group('when release-version is passed', () {
+        setUp(() {
+          when(() => argResults.wasParsed('release-version')).thenReturn(true);
+        });
+
+        test('logs error and exits with usage err', () async {
+          await expectLater(
+            () => runWithOverrides(iosReleaser.assertArgsAreValid),
+            exitsWithCode(ExitCode.usage),
+          );
+
+          verify(
+            () => logger.err(
+              '''
+The "--release-version" flag is only supported for aar and ios-framework releases.
+
+To change the version of this release, change your app's version in your pubspec.yaml.''',
+            ),
+          ).called(1);
+        });
+      });
+
+      group('when --obfuscate is passed', () {
+        setUp(() {
+          when(() => argResults['obfuscate']).thenReturn(true);
+          when(() => argResults.wasParsed('obfuscate')).thenReturn(true);
+          when(() => quickpatchEnv.flutterRevision).thenReturn('deadbeef');
+        });
+
+        group('when Flutter version supports obfuscation', () {
+          setUp(() {
+            when(
+              () => quickpatchFlutter.resolveFlutterVersion(any()),
+            ).thenAnswer((_) async => Version(3, 41, 2));
+          });
+
+          test('returns normally', () async {
+            await expectLater(
+              runWithOverrides(iosReleaser.assertArgsAreValid),
+              completes,
+            );
+          });
+        });
+
+        group('when Flutter version does not support obfuscation', () {
+          setUp(() {
+            when(
+              () => quickpatchFlutter.resolveFlutterVersion(any()),
+            ).thenAnswer((_) async => Version(3, 27, 4));
+          });
+
+          test('logs error and exits', () async {
+            await expectLater(
+              () => runWithOverrides(iosReleaser.assertArgsAreValid),
+              exitsWithCode(ExitCode.unavailable),
+            );
+          });
+        });
+      });
+
+      group('when --obfuscate is not passed', () {
+        test('returns normally', () async {
+          await expectLater(
+            runWithOverrides(iosReleaser.assertArgsAreValid),
+            completes,
+          );
+        });
+      });
+
+      group('when --export-options-plist is provided', () {
+        late Directory tempDir;
+
+        setUp(() {
+          tempDir = Directory.systemTemp.createTempSync(
+            'export_options_releaser_',
+          );
+        });
+
+        tearDown(() {
+          tempDir.deleteSync(recursive: true);
+        });
+
+        File writePlist(String body) {
+          return File(p.join(tempDir.path, 'ExportOptions.plist'))
+            ..writeAsStringSync('''
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+$body
+</dict>
+</plist>
+''');
+        }
+
+        test(
+          'returns normally when manageAppVersionAndBuildNumber is absent',
+          () async {
+            final file = writePlist(
+              '<key>method</key><string>app-store</string>',
+            );
+            when(
+              () => argResults[CommonArguments.exportOptionsPlistArg.name],
+            ).thenReturn(file.path);
+
+            await expectLater(
+              runWithOverrides(iosReleaser.assertArgsAreValid),
+              completes,
+            );
+          },
+        );
+
+        test(
+          '''logs error and exits with usage when manageAppVersionAndBuildNumber is true''',
+          () async {
+            final file = writePlist(
+              '<key>manageAppVersionAndBuildNumber</key><true/>',
+            );
+            when(
+              () => argResults[CommonArguments.exportOptionsPlistArg.name],
+            ).thenReturn(file.path);
+
+            await expectLater(
+              () => runWithOverrides(iosReleaser.assertArgsAreValid),
+              exitsWithCode(ExitCode.usage),
+            );
+            verify(
+              () => logger.err(
+                any(that: contains('manageAppVersionAndBuildNumber')),
+              ),
+            ).called(1);
+          },
+        );
+      });
+    });
+
+    group('addObfuscationMapArgs', () {
+      // The libapp.so strip gating only applies to Android; on iOS AGP is
+      // not in the pipeline. iOS must continue to pre-strip the snapshot in
+      // gen_snapshot regardless of the Flutter version to prevent the
+      // DWARF debug sections from leaking the identifiers obfuscation is
+      // meant to hide.
+      setUp(() {
+        when(() => argResults['obfuscate']).thenReturn(true);
+        when(() => argResults.wasParsed('obfuscate')).thenReturn(true);
+        when(() => quickpatchEnv.flutterRevision).thenReturn('deadbeef');
+        when(
+          () => quickpatchEnv.getQuickPatchProjectRoot(),
+        ).thenReturn(projectRoot);
+      });
+
+      test('passes --strip on Flutter 3.44+ for iOS', () async {
+        when(
+          () => quickpatchFlutter.shouldPreStripLibappInGenSnapshot(
+            platform: any(named: 'platform'),
+            flutterRevision: any(named: 'flutterRevision'),
+          ),
+        ).thenAnswer((_) async => true);
+
+        final buildArgs = <String>[];
+        await runWithOverrides(
+          () => iosReleaser.addObfuscationMapArgs(buildArgs),
+        );
+
+        expect(
+          buildArgs,
+          contains('--extra-gen-snapshot-options=--strip'),
+        );
+      });
+    });
+
+    group('buildReleaseArtifacts', () {
+      const flutterVersionAndRevision = '3.10.6 (83305b5088)';
+      const base64PublicKey = 'base64PublicKey';
+
+      late Directory xcarchiveDirectory;
+      late Directory iosAppDirectory;
+
+      setUp(() {
+        xcarchiveDirectory = Directory.systemTemp.createTempSync();
+        iosAppDirectory = Directory.systemTemp.createTempSync();
+        when(() => argResults['codesign']).thenReturn(true);
+        when(
+          () => artifactBuilder.buildIpa(
+            codesign: any(named: 'codesign'),
+            flavor: any(named: 'flavor'),
+            target: any(named: 'target'),
+            args: any(named: 'args'),
+          ),
+        ).thenAnswer(
+          (_) async => AppleBuildResult(kernelFile: File('/path/to/app.dill')),
+        );
+
+        when(
+          () => artifactManager.getIosAppDirectory(
+            xcarchiveDirectory: any(named: 'xcarchiveDirectory'),
+          ),
+        ).thenReturn(iosAppDirectory);
+        when(
+          () => artifactManager.getXcarchiveDirectory(),
+        ).thenReturn(xcarchiveDirectory);
+
+        when(
+          () => codeSigner.base64PublicKeyFromPem(any()),
+        ).thenReturn(base64PublicKey);
+
+        when(
+          () => quickpatchEnv.getQuickPatchProjectRoot(),
+        ).thenReturn(projectRoot);
+        when(
+          () => quickpatchFlutter.getVersionAndRevision(),
+        ).thenAnswer((_) async => flutterVersionAndRevision);
+      });
+
+      group('when a patch signing key path is provided', () {
+        setUp(() {
+          final patchSigningPublicKeyFile = File(
+            p.join(
+              Directory.systemTemp.createTempSync().path,
+              'patch-signing-public-key.pem',
+            ),
+          )..createSync(recursive: true);
+          when(
+            () => argResults[CommonArguments.publicKeyArg.name],
+          ).thenReturn(patchSigningPublicKeyFile.path);
+          when(
+            () => argResults.wasParsed(CommonArguments.publicKeyArg.name),
+          ).thenReturn(true);
+
+          when(
+            () => artifactBuilder.buildIpa(
+              codesign: any(named: 'codesign'),
+              flavor: any(named: 'flavor'),
+              target: any(named: 'target'),
+              args: any(named: 'args'),
+              base64PublicKey: any(named: 'base64PublicKey'),
+              ddMaxBytes: any(named: 'ddMaxBytes'),
+            ),
+          ).thenAnswer(
+            (_) async =>
+                AppleBuildResult(kernelFile: File('/path/to/app.dill')),
+          );
+        });
+
+        test(
+          'encodes the patch signing public key and forward it to buildIpa',
+          () async {
+            await runWithOverrides(() => iosReleaser.buildReleaseArtifacts());
+
+            verify(
+              () => artifactBuilder.buildIpa(
+                codesign: any(named: 'codesign'),
+                flavor: any(named: 'flavor'),
+                target: any(named: 'target'),
+                args: any(named: 'args'),
+                base64PublicKey: base64PublicKey,
+              ),
+            ).called(1);
+          },
+        );
+      });
+
+      group('when a public-key-cmd is provided', () {
+        setUp(() {
+          when(
+            () => argResults[CommonArguments.publicKeyCmd.name],
+          ).thenReturn('get-key-cmd');
+          when(
+            () => argResults.wasParsed(CommonArguments.publicKeyCmd.name),
+          ).thenReturn(true);
+
+          when(
+            () => artifactBuilder.buildIpa(
+              codesign: any(named: 'codesign'),
+              flavor: any(named: 'flavor'),
+              target: any(named: 'target'),
+              args: any(named: 'args'),
+              base64PublicKey: any(named: 'base64PublicKey'),
+              ddMaxBytes: any(named: 'ddMaxBytes'),
+            ),
+          ).thenAnswer(
+            (_) async =>
+                AppleBuildResult(kernelFile: File('/path/to/app.dill')),
+          );
+
+          when(
+            () => codeSigner.runPublicKeyCmd(any()),
+          ).thenAnswer((_) async => 'pem-public-key');
+          when(
+            () => codeSigner.base64PublicKeyFromPem(any()),
+          ).thenReturn('base64PublicKeyFromCmd');
+        });
+
+        test(
+          'runs public key cmd and forwards encoded key to buildIpa',
+          () async {
+            await runWithOverrides(() => iosReleaser.buildReleaseArtifacts());
+
+            verify(
+              () => codeSigner.runPublicKeyCmd('get-key-cmd'),
+            ).called(1);
+            verify(
+              () => codeSigner.base64PublicKeyFromPem('pem-public-key'),
+            ).called(1);
+            verify(
+              () => artifactBuilder.buildIpa(
+                codesign: any(named: 'codesign'),
+                flavor: any(named: 'flavor'),
+                target: any(named: 'target'),
+                args: any(named: 'args'),
+                base64PublicKey: 'base64PublicKeyFromCmd',
+              ),
+            ).called(1);
+          },
+        );
+      });
+
+      group('when not codesigning', () {
+        setUp(() {
+          when(() => argResults['codesign']).thenReturn(false);
+        });
+
+        test('logs warning about patching', () async {
+          await runWithOverrides(iosReleaser.buildReleaseArtifacts);
+
+          verify(
+            () => logger.info(
+              '''Building for device with codesigning disabled. You will have to manually codesign before deploying to device.''',
+            ),
+          ).called(1);
+          verify(
+            () => logger.warn(
+              '''quickpatch preview will not work for releases created with "--no-codesign". However, you can still preview your app by signing the generated .xcarchive in Xcode.''',
+            ),
+          ).called(1);
+          verify(
+            () => logger.warn(
+              any(
+                that: allOf(
+                  contains('Manage Version and Build Number'),
+                  contains('Patches will then fail to apply'),
+                ),
+              ),
+            ),
+          ).called(1);
+        });
+      });
+
+      group('when stale build/ios/quickpatch directory exists', () {
+        late Directory quickpatchSupplementDir;
+
+        setUp(() {
+          quickpatchSupplementDir = Directory(
+            p.join(projectRoot.path, 'build', 'ios', 'quickpatch'),
+          )..createSync(recursive: true);
+          when(
+            () => artifactManager.getIosReleaseSupplementDirectory(),
+          ).thenReturn(quickpatchSupplementDir);
+        });
+
+        test('deletes the directory', () async {
+          expect(quickpatchSupplementDir.existsSync(), isTrue);
+          await runWithOverrides(iosReleaser.buildReleaseArtifacts);
+          expect(quickpatchSupplementDir.existsSync(), isFalse);
+        });
+      });
+
+      group('when platform was specified via arg results rest', () {
+        setUp(() {
+          when(() => argResults.rest).thenReturn(['ios', '--verbose']);
+        });
+
+        test('verifies artifacts exist and returns xcarchive path', () async {
+          expect(
+            await runWithOverrides(iosReleaser.buildReleaseArtifacts),
+            equals(xcarchiveDirectory),
+          );
+
+          verify(() => artifactManager.getXcarchiveDirectory()).called(1);
+          verify(
+            () => artifactManager.getIosAppDirectory(
+              xcarchiveDirectory: xcarchiveDirectory,
+            ),
+          ).called(1);
+          verify(() => artifactBuilder.buildIpa(args: ['--verbose'])).called(1);
+        });
+      });
+
+      test('verifies artifacts exist and returns xcarchive path', () async {
+        expect(
+          await runWithOverrides(iosReleaser.buildReleaseArtifacts),
+          equals(xcarchiveDirectory),
+        );
+
+        verify(() => artifactManager.getXcarchiveDirectory()).called(1);
+        verify(
+          () => artifactManager.getIosAppDirectory(
+            xcarchiveDirectory: xcarchiveDirectory,
+          ),
+        ).called(1);
+      });
+
+      group('when xcarchive not found after build', () {
+        setUp(() {
+          when(() => artifactManager.getXcarchiveDirectory()).thenReturn(null);
+        });
+
+        test('logs message and exits with code 70', () async {
+          await expectLater(
+            () => runWithOverrides(iosReleaser.buildReleaseArtifacts),
+            exitsWithCode(ExitCode.software),
+          );
+
+          verify(
+            () => logger.err('Unable to find .xcarchive directory'),
+          ).called(1);
+        });
+      });
+
+      group('when app not found after build', () {
+        setUp(() {
+          when(
+            () => artifactManager.getIosAppDirectory(
+              xcarchiveDirectory: any(named: 'xcarchiveDirectory'),
+            ),
+          ).thenReturn(null);
+        });
+
+        test('logs message and exits with code 70', () async {
+          await expectLater(
+            () => runWithOverrides(iosReleaser.buildReleaseArtifacts),
+            exitsWithCode(ExitCode.software),
+          );
+
+          verify(() => logger.err('Unable to find .app directory')).called(1);
+        });
+      });
+
+      group('when --obfuscate is passed', () {
+        setUp(() {
+          when(() => argResults['obfuscate']).thenReturn(true);
+          when(() => argResults.wasParsed('obfuscate')).thenReturn(true);
+          when(() => quickpatchEnv.flutterRevision).thenReturn('deadbeef');
+          // iOS always pre-strips in gen_snapshot (AGP isn't in the pipeline).
+          when(
+            () => quickpatchFlutter.shouldPreStripLibappInGenSnapshot(
+              platform: any(named: 'platform'),
+              flutterRevision: any(named: 'flutterRevision'),
+            ),
+          ).thenAnswer((_) async => true);
+          // By default, simulate the build creating the obfuscation map.
+          when(
+            () => artifactBuilder.buildIpa(
+              codesign: any(named: 'codesign'),
+              flavor: any(named: 'flavor'),
+              target: any(named: 'target'),
+              args: any(named: 'args'),
+            ),
+          ).thenAnswer((_) async {
+            final mapPath = p.join(
+              projectRoot.path,
+              'build',
+              'quickpatch',
+              'obfuscation_map.json',
+            );
+            File(mapPath)
+              ..createSync(recursive: true)
+              ..writeAsStringSync('{}');
+            return AppleBuildResult(
+              kernelFile: File('/path/to/app.dill'),
+            );
+          });
+        });
+
+        test('injects --save-obfuscation-map into build args', () async {
+          await runWithOverrides(iosReleaser.buildReleaseArtifacts);
+
+          final captured = verify(
+            () => artifactBuilder.buildIpa(
+              codesign: any(named: 'codesign'),
+              flavor: any(named: 'flavor'),
+              target: any(named: 'target'),
+              args: captureAny(named: 'args'),
+            ),
+          ).captured;
+
+          final args = captured.last as List<String>;
+          expect(
+            args.any(
+              (a) => a.startsWith(
+                '--extra-gen-snapshot-options=--save-obfuscation-map=',
+              ),
+            ),
+            isTrue,
+          );
+        });
+
+        test('auto-defaults --split-debug-info when not provided', () async {
+          await runWithOverrides(iosReleaser.buildReleaseArtifacts);
+
+          final captured = verify(
+            () => artifactBuilder.buildIpa(
+              codesign: any(named: 'codesign'),
+              flavor: any(named: 'flavor'),
+              target: any(named: 'target'),
+              args: captureAny(named: 'args'),
+            ),
+          ).captured;
+
+          final args = captured.last as List<String>;
+          expect(
+            args.any(
+              (a) => a.startsWith('--split-debug-info='),
+            ),
+            isTrue,
+          );
+        });
+
+        group('when --split-debug-info is also provided', () {
+          setUp(() {
+            when(
+              () => argResults.wasParsed('split-debug-info'),
+            ).thenReturn(true);
+            when(
+              () => argResults['split-debug-info'],
+            ).thenReturn('custom/symbols');
+          });
+
+          test('preserves user-provided --split-debug-info', () async {
+            await runWithOverrides(iosReleaser.buildReleaseArtifacts);
+
+            final captured = verify(
+              () => artifactBuilder.buildIpa(
+                codesign: any(named: 'codesign'),
+                flavor: any(named: 'flavor'),
+                target: any(named: 'target'),
+                args: captureAny(named: 'args'),
+              ),
+            ).captured;
+
+            final args = captured.last as List<String>;
+            expect(
+              args,
+              contains('--split-debug-info=custom/symbols'),
+            );
+            // Should not contain a second auto-defaulted one.
+            expect(
+              args.where((a) => a.startsWith('--split-debug-info=')).length,
+              equals(1),
+            );
+          });
+        });
+
+        test('logs detail about map location', () async {
+          await runWithOverrides(iosReleaser.buildReleaseArtifacts);
+
+          verify(
+            () => logger.detail(
+              any(that: startsWith('Obfuscation map saved to')),
+            ),
+          ).called(1);
+        });
+
+        group('when obfuscation map is not generated', () {
+          setUp(() {
+            // Override to NOT create the map file.
+            when(
+              () => artifactBuilder.buildIpa(
+                codesign: any(named: 'codesign'),
+                flavor: any(named: 'flavor'),
+                target: any(named: 'target'),
+                args: any(named: 'args'),
+              ),
+            ).thenAnswer(
+              (_) async =>
+                  AppleBuildResult(kernelFile: File('/path/to/app.dill')),
+            );
+          });
+
+          test('logs error and exits', () async {
+            await expectLater(
+              () => runWithOverrides(iosReleaser.buildReleaseArtifacts),
+              exitsWithCode(ExitCode.software),
+            );
+
+            verify(
+              () => logger.err(
+                any(
+                  that: contains(
+                    'Obfuscation was enabled but the obfuscation map was not',
+                  ),
+                ),
+              ),
+            ).called(1);
+          });
+        });
+      });
+    });
+
+    group('getReleaseVersion', () {
+      late Directory xcarchiveDirectory;
+
+      setUp(() {
+        xcarchiveDirectory = Directory.systemTemp.createTempSync();
+      });
+
+      group('when plist does not exist', () {
+        test('logs error and exits', () async {
+          await expectLater(
+            () => runWithOverrides(
+              () => iosReleaser.getReleaseVersion(
+                releaseArtifactRoot: xcarchiveDirectory,
+              ),
+            ),
+            exitsWithCode(ExitCode.software),
+          );
+
+          verify(
+            () => logger.err(
+              '''No Info.plist file found at ${p.join(xcarchiveDirectory.path, 'Info.plist')}''',
+            ),
+          ).called(1);
+        });
+      });
+
+      group('when plist does not contain version number', () {
+        late File plist;
+        setUp(() {
+          plist = File(p.join(xcarchiveDirectory.path, 'Info.plist'))
+            ..createSync()
+            ..writeAsStringSync('''
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>ApplicationProperties</key>
+	<dict>
+	</dict>
+</dict>
+</plist>'
+''');
+        });
+
+        test('logs error and exits', () async {
+          await expectLater(
+            () => runWithOverrides(
+              () => iosReleaser.getReleaseVersion(
+                releaseArtifactRoot: xcarchiveDirectory,
+              ),
+            ),
+            exitsWithCode(ExitCode.software),
+          );
+
+          verify(
+            () => logger.err(
+              any(
+                that: startsWith(
+                  'Failed to determine release version from ${plist.path}',
+                ),
+              ),
+            ),
+          ).called(1);
+        });
+      });
+
+      group('when plist contains version number', () {
+        setUp(() {
+          File(p.join(xcarchiveDirectory.path, 'Info.plist'))
+            ..createSync()
+            ..writeAsStringSync('''
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>ApplicationProperties</key>
+	<dict>
+		<key>ApplicationPath</key>
+		<string>Applications/Runner.app</string>
+		<key>Architectures</key>
+		<array>
+			<string>arm64</string>
+		</array>
+		<key>CFBundleIdentifier</key>
+		<string>com.quickpatch.timeShift</string>
+		<key>CFBundleShortVersionString</key>
+		<string>1.2.3</string>
+		<key>CFBundleVersion</key>
+		<string>1</string>
+	</dict>
+	<key>ArchiveVersion</key>
+	<integer>2</integer>
+	<key>Name</key>
+	<string>Runner</string>
+	<key>SchemeName</key>
+	<string>Runner</string>
+</dict>
+</plist>''');
+        });
+
+        test('returns version number from plist', () async {
+          expect(
+            await runWithOverrides(
+              () => iosReleaser.getReleaseVersion(
+                releaseArtifactRoot: xcarchiveDirectory,
+              ),
+            ),
+            equals('1.2.3+1'),
+          );
+        });
+      });
+    });
+
+    group('uploadReleaseArtifacts', () {
+      const appId = 'appId';
+      const releaseVersion = '1.0.0';
+      const flutterRevision = 'deadbeef';
+      const flutterVersion = '3.22.0';
+      const codesign = true;
+      const podfileLockContent = 'podfile-lock';
+
+      final release = Release(
+        id: 42,
+        appId: appId,
+        version: releaseVersion,
+        flutterRevision: flutterRevision,
+        flutterVersion: flutterVersion,
+        displayName: '1.2.3+1',
+        platformStatuses: const {},
+        createdAt: DateTime(2023),
+        updatedAt: DateTime(2023),
+      );
+
+      late Directory xcarchiveDirectory;
+      late Directory iosAppDirectory;
+      late Directory supplementDirectory;
+
+      setUp(() {
+        when(() => argResults['codesign']).thenReturn(codesign);
+        when(
+          () => quickpatchEnv.getQuickPatchProjectRoot(),
+        ).thenReturn(projectRoot);
+
+        xcarchiveDirectory = Directory.systemTemp.createTempSync();
+        iosAppDirectory = Directory.systemTemp.createTempSync();
+        supplementDirectory = Directory.systemTemp.createTempSync();
+        when(
+          artifactManager.getXcarchiveDirectory,
+        ).thenReturn(xcarchiveDirectory);
+        when(
+          () => artifactManager.getIosAppDirectory(
+            xcarchiveDirectory: any(named: 'xcarchiveDirectory'),
+          ),
+        ).thenReturn(iosAppDirectory);
+        when(
+          () => artifactManager.getIosReleaseSupplementDirectory(),
+        ).thenReturn(supplementDirectory);
+        when(
+          () => codePushClientWrapper.createIosReleaseArtifacts(
+            appId: any(named: 'appId'),
+            releaseId: any(named: 'releaseId'),
+            xcarchivePath: any(named: 'xcarchivePath'),
+            runnerPath: any(named: 'runnerPath'),
+            isCodesigned: any(named: 'isCodesigned'),
+            podfileLockHash: any(named: 'podfileLockHash'),
+          ),
+        ).thenAnswer((_) async => {});
+        when(
+          () => quickpatchEnv.iosPodfileLockHash,
+        ).thenReturn('${sha256.convert(utf8.encode(podfileLockContent))}');
+      });
+
+      test('forwards call to codePushClientWrapper', () async {
+        await runWithOverrides(
+          () => iosReleaser.uploadReleaseArtifacts(
+            release: release,
+            appId: appId,
+          ),
+        );
+
+        verify(
+          () => codePushClientWrapper.createIosReleaseArtifacts(
+            appId: appId,
+            releaseId: release.id,
+            xcarchivePath: xcarchiveDirectory.path,
+            runnerPath: iosAppDirectory.path,
+            isCodesigned: codesign,
+            podfileLockHash:
+                '${sha256.convert(utf8.encode(podfileLockContent))}',
+          ),
+        ).called(1);
+      });
+
+      group('when obfuscation map exists', () {
+        setUp(() {
+          // Create the obfuscation map file at the expected path.
+          File(
+              p.join(
+                projectRoot.path,
+                'build',
+                'quickpatch',
+                'obfuscation_map.json',
+              ),
+            )
+            ..createSync(recursive: true)
+            ..writeAsStringSync('{"key": "value"}');
+        });
+
+        test('passes obfuscation map path to wrapper', () async {
+          await runWithOverrides(
+            () => iosReleaser.uploadReleaseArtifacts(
+              release: release,
+              appId: appId,
+            ),
+          );
+
+          verify(
+            () => codePushClientWrapper.createIosReleaseArtifacts(
+              appId: appId,
+              releaseId: release.id,
+              xcarchivePath: xcarchiveDirectory.path,
+              runnerPath: iosAppDirectory.path,
+              isCodesigned: codesign,
+              podfileLockHash:
+                  '${sha256.convert(utf8.encode(podfileLockContent))}',
+            ),
+          ).called(1);
+        });
+      });
+    });
+
+    group('updatedReleaseMetadata', () {
+      const flutterRevision = '853d13d954df3b6e9c2f07b72062f33c52a9a64b';
+      const operatingSystem = 'macOS';
+      const operatingSystemVersion = '11.0.0';
+      const xcodeVersion = '123';
+      const flutterVersionOverride = '1.2.3';
+      const metadata = UpdateReleaseMetadata(
+        releasePlatform: ReleasePlatform.ios,
+        flutterVersionOverride: flutterVersionOverride,
+        includesPublicKey: false,
+        environment: BuildEnvironmentMetadata(
+          flutterRevision: flutterRevision,
+          operatingSystem: operatingSystem,
+          operatingSystemVersion: operatingSystemVersion,
+          quickpatchVersion: packageVersion,
+          quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
+          usesQuickPatchCodePushPackage: true,
+        ),
+      );
+
+      setUp(() {
+        when(() => xcodeBuild.version()).thenAnswer((_) async => xcodeVersion);
+      });
+
+      test('returns expected metadata', () async {
+        expect(
+          runWithOverrides(() => iosReleaser.updatedReleaseMetadata(metadata)),
+          completion(
+            const UpdateReleaseMetadata(
+              releasePlatform: ReleasePlatform.ios,
+              flutterVersionOverride: flutterVersionOverride,
+              includesPublicKey: false,
+              environment: BuildEnvironmentMetadata(
+                flutterRevision: flutterRevision,
+                operatingSystem: operatingSystem,
+                operatingSystemVersion: operatingSystemVersion,
+                quickpatchVersion: packageVersion,
+                quickpatchYaml: QuickPatchYaml(appId: 'app-id'),
+                usesQuickPatchCodePushPackage: true,
+                xcodeVersion: xcodeVersion,
+              ),
+            ),
+          ),
+        );
+      });
+    });
+
+    group('postReleaseInstructions', () {
+      late Directory xcarchiveDirectory;
+
+      setUp(() {
+        xcarchiveDirectory = Directory.systemTemp.createTempSync();
+        when(
+          () => artifactManager.getXcarchiveDirectory(),
+        ).thenReturn(xcarchiveDirectory);
+      });
+
+      group('when codesigning', () {
+        setUp(() {
+          when(() => argResults['codesign']).thenReturn(true);
+        });
+
+        test('prints ipa upload steps', () {
+          expect(
+            runWithOverrides(() => iosReleaser.postReleaseInstructions),
+            equals('''
+
+Your next step is to upload your app to App Store Connect.
+
+To upload to the App Store, do one of the following:
+    1. Open ${lightCyan.wrap(p.relative(xcarchiveDirectory.path))} in Xcode and use the "Distribute App" flow.
+    2. Drag and drop the ${lightCyan.wrap('build/ios/ipa/*.ipa')} bundle into the Apple Transporter macOS app (https://apps.apple.com/us/app/transporter/id1450874784).
+    3. Run ${lightCyan.wrap('xcrun altool --upload-app --type ios -f ${p.relative('build/ios/ipa/*.ipa')} --apiKey your_api_key --apiIssuer your_issuer_id')}.
+       See "man altool" for details about how to authenticate with the App Store Connect API key.
+'''),
+          );
+        });
+      });
+
+      group('when not codesigning', () {
+        setUp(() {
+          when(() => argResults['codesign']).thenReturn(false);
+        });
+
+        test('prints xcarchive upload steps', () {
+          expect(
+            runWithOverrides(() => iosReleaser.postReleaseInstructions),
+            equals('''
+
+Your next step is to submit the archive at ${lightCyan.wrap(p.relative(xcarchiveDirectory.path))} to the App Store using Xcode.
+
+You can open the archive in Xcode by running:
+    ${lightCyan.wrap('open ${p.relative(xcarchiveDirectory.path)}')}
+
+${styleBold.wrap('Make sure to uncheck "Manage Version and Build Number" in the Distribute App dialog.')}
+If left checked, Xcode will rewrite the build number in the uploaded IPA, so the version that ships will not match the one QuickPatch recorded for this release, and patches will fail to apply.
+'''),
+          );
+        });
+      });
+    });
+  }, testOn: 'mac-os');
+}

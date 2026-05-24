@@ -1,0 +1,23 @@
+import 'package:quickpatch_code_push_protocol/quickpatch_code_push_protocol.dart';
+import 'package:test/test.dart';
+
+void main() {
+  group(GetOrganizationUsersResponse, () {
+    test('can be (de)serialized', () {
+      final getOrganizationUsersRequest = GetOrganizationUsersResponse(
+        users: [
+          OrganizationUser(
+            user: publicUserFromPrivateUser(privateUserForTest()),
+            role: Role.owner,
+          ),
+        ],
+      );
+      expect(
+        GetOrganizationUsersResponse.fromJson(
+          getOrganizationUsersRequest.toJson(),
+        ).toJson(),
+        equals(getOrganizationUsersRequest.toJson()),
+      );
+    });
+  });
+}
