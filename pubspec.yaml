@@ -14,3 +14,6 @@ workspace:
   - quickpatch_code_push_protocol
 
 dev_dependencies:
+flutter:
+  assets:
+    - shorebird.yaml

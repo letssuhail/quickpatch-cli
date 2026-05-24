@@ -408,14 +408,28 @@ app_id:
         .getQuickPatchYamlFile(cwd: projectRoot)
         .writeAsStringSync(yamlContents);
 
-    // The native QuickPatch engine loads its config from flutter_assets as
-    // `shorebird.yaml`. Mirror quickpatch.yaml -> shorebird.yaml so the engine
-    // initializes (app_id, auto_update). quickpatch.yaml stays the source file.
+    // The native engine loads its config from flutter_assets as `shorebird.yaml`.
+    // Mirror quickpatch.yaml -> shorebird.yaml so the engine initializes.
+    // This file is auto-generated and hidden from version control via .gitignore.
     File(
       p.join(projectRoot.path, 'shorebird.yaml'),
     ).writeAsStringSync(yamlContents);
 
+    // Hide shorebird.yaml from the user's git history — it's auto-generated.
+    _ensureGitignored(projectRoot, 'shorebird.yaml');
+
     return QuickPatchYaml(appId: appId);
+  }
+
+  void _ensureGitignored(Directory projectRoot, String entry) {
+    final gitignoreFile = File(p.join(projectRoot.path, '.gitignore'));
+    final lines = gitignoreFile.existsSync()
+        ? gitignoreFile.readAsStringSync()
+        : '';
+    if (!lines.split('\n').map((l) => l.trim()).contains(entry)) {
+      final separator = lines.isNotEmpty && !lines.endsWith('\n') ? '\n' : '';
+      gitignoreFile.writeAsStringSync('$lines$separator$entry\n');
+    }
   }
 
   void _logAvailableOrganizations(
