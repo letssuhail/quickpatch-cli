@@ -1,3 +1,7 @@
+## 1.6.106
+
+- **Fix**: When `QUICKPATCH_HOSTED_URL` is not set, the CLI now shows a clear error with the exact export command (platform-aware: `export` on macOS/Linux, `$env:` on Windows) instead of a cryptic `SocketException`.
+
 ## 1.6.105
 
 - **Login**: Replaced browser OAuth flow with API key authentication. Run `quickpatch login` and paste your key from the dashboard.

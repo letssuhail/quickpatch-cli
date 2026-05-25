@@ -1,6 +1,6 @@
 name: quickpatch_cli
 description: QuickPatch — self-hosted OTA code-push for Flutter apps.
-version: 1.6.105
+version: 1.6.106
 repository: https://github.com/letssuhail/quickpatch-cli
 
 
@@ -39,7 +39,7 @@ dependencies:
   retry: ^3.1.2
   scoped_deps: ^0.1.0
   quickpatch_build_trace: ^0.1.0
-  quickpatch_code_push_client: ^0.9.0+1
+  quickpatch_code_push_client: ^0.9.1
   quickpatch_code_push_protocol: ^0.1.0+1
   stream_transform: ^2.1.1
   uuid: ^4.5.3
