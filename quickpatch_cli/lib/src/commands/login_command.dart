@@ -30,16 +30,28 @@ class LoginCommand extends QuickPatchCommand {
       return ExitCode.success.code;
     }
 
+    logger.info('''
+To log in, generate an API key from the QuickPatch console:
+
+  ${styleBold.wrap(lightCyan.wrap('https://quickpatch.vercel.app'))}
+
+Then paste it below.''');
+
+    final apiKey = logger.prompt('? Enter your API key (qp_api_...):').trim();
+
+    if (!apiKey.startsWith('qp_api_')) {
+      logger.err(
+        'Invalid API key format. Expected a key starting with "qp_api_".',
+      );
+      return ExitCode.usage.code;
+    }
+
     try {
-      await auth.login(prompt: prompt);
-    } on UserNotFoundException catch (error) {
-      final consoleUri = Uri.https('console.quickpatch.dev');
-      logger
-        ..err('''
-We could not find a QuickPatch account for ${error.email}.''')
-        ..info(
-          """If you have not yet created an account, you can do so at "${link(uri: consoleUri)}". If you believe this is an error, please reach out to us via Discord, we're happy to help!""",
-        );
+      await auth.loginWithApiKey(apiKey);
+    } on ApiKeyNotFoundException {
+      logger.err(
+        'API key not recognized. Please check the key and try again.',
+      );
       return ExitCode.software.code;
     } on Exception catch (error) {
       logger.err(error.toString());
@@ -48,22 +60,10 @@ We could not find a QuickPatch account for ${error.email}.''')
 
     logger.info('''
 
-🎉 ${lightGreen.wrap('Welcome to QuickPatch! You are now logged in as <${auth.email}>.')}
+${lightGreen.wrap('You are now logged in.')}
 
-🔑 Credentials are stored in ${lightCyan.wrap(auth.credentialsFilePath)}.
-🚪 To logout use: "${lightCyan.wrap('quickpatch logout')}".''');
+${'🔑'} Credentials are stored in ${lightCyan.wrap(auth.credentialsFilePath)}.
+${'🚪'} To logout use: "${lightCyan.wrap('quickpatch logout')}".''');
     return ExitCode.success.code;
-  }
-
-  /// Prompt the user to log in.
-  void prompt(String url) {
-    logger.info('''
-The QuickPatch CLI needs your authorization to manage apps, releases, and patches on your behalf.
-
-In a browser, visit this URL to log in:
-
-${styleBold.wrap(styleUnderlined.wrap(lightCyan.wrap(url)))}
-
-Waiting for your authorization...''');
   }
 }

@@ -268,6 +268,32 @@ class Auth {
     return _httpClient;
   }
 
+  /// Logs in the user via an API key.
+  ///
+  /// Validates the key against the server, then persists it locally so
+  /// subsequent CLI invocations are authenticated without re-prompting.
+  Future<void> loginWithApiKey(String apiKey) async {
+    if (isAuthenticated) {
+      throw UserAlreadyLoggedInException(email: _email);
+    }
+
+    _apiKey = apiKey;
+
+    final codePushClient = _buildCodePushClient(
+      httpClient: client,
+      hostedUri: quickpatchEnv.hostedUri,
+    );
+
+    final user = await codePushClient.getCurrentUser();
+    if (user == null) {
+      _apiKey = null;
+      throw ApiKeyNotFoundException();
+    }
+
+    _email = user.email;
+    _flushApiKey(apiKey);
+  }
+
   /// Logs in the user via the QuickPatch loopback OAuth flow.
   Future<void> login({required void Function(String) prompt}) async {
     if (isAuthenticated) {
@@ -388,9 +414,12 @@ class Auth {
     if (credentialsFile.existsSync()) {
       try {
         final contents = credentialsFile.readAsStringSync();
-        _credentials = oauth2.AccessCredentials.fromJson(
-          json.decode(contents) as Map<String, dynamic>,
-        );
+        final decoded = json.decode(contents) as Map<String, dynamic>;
+        if (decoded.containsKey('api_key')) {
+          _apiKey = decoded['api_key'] as String;
+          return;
+        }
+        _credentials = oauth2.AccessCredentials.fromJson(decoded);
         _email = _credentials?.email;
       } on Exception {
         // Swallow json decode exceptions.
@@ -402,6 +431,12 @@ class Auth {
     File(credentialsFilePath)
       ..createSync(recursive: true)
       ..writeAsStringSync(json.encode(credentials.toJson()));
+  }
+
+  void _flushApiKey(String apiKey) {
+    File(credentialsFilePath)
+      ..createSync(recursive: true)
+      ..writeAsStringSync(json.encode({'api_key': apiKey}));
   }
 
   void _clearCredentials() {
@@ -437,6 +472,12 @@ extension JwtClaims on oauth2.AccessCredentials {
 
     return jwt.claims['email'] as String?;
   }
+}
+
+/// Thrown when an API key is rejected by the server.
+class ApiKeyNotFoundException implements Exception {
+  @override
+  String toString() => 'ApiKeyNotFoundException';
 }
 
 /// Thrown when an already authenticated user attempts to log in or sign up.
