@@ -1,3 +1,7 @@
+## 1.6.107
+
+- **`flutter versions list`**: Now fetches supported versions directly from your QuickPatch server instead of reading all Shorebird fork branches. Only versions mirrored in R2 are shown — the ones you actually support. Falls back to local git branch listing if server is unreachable.
+
 ## 1.6.106
 
 - **Fix**: When `QUICKPATCH_HOSTED_URL` is not set, the CLI now shows a clear error with the exact export command (platform-aware: `export` on macOS/Linux, `$env:` on Windows) instead of a cryptic `SocketException`.

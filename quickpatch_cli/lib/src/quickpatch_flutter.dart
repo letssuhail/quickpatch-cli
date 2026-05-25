@@ -340,8 +340,36 @@ class QuickPatchFlutter {
     }
   }
 
-  /// Get the list of Flutter versions for the given [revision].
+  /// Get the list of Flutter versions supported by this QuickPatch installation.
+  ///
+  /// Fetches from the server's /api/v1/flutter-versions endpoint (which reflects
+  /// what is actually mirrored in R2) so users only see versions we truly support.
+  /// Falls back to local git branch listing if the server is unreachable.
   Future<List<String>> getVersions({String? revision}) async {
+    // Try server first — use configured URL or fall back to production default
+    final hostedUri = quickpatchEnv.hostedUri ??
+        Uri.parse('https://quickpatch-server-production.up.railway.app');
+    try {
+      final uri = hostedUri.resolve('/api/v1/flutter-versions');
+      final client = HttpClient();
+      final request = await client.getUrl(uri);
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      final response = await request.close().timeout(
+        const Duration(seconds: 8),
+      );
+      if (response.statusCode == 200) {
+        final body = await response.transform(utf8.decoder).join();
+        final json = jsonDecode(body) as Map<String, dynamic>;
+        final versions = (json['versions'] as List).cast<String>();
+        client.close();
+        if (versions.isNotEmpty) return versions;
+      }
+      client.close();
+    } on Exception {
+      // Fall through to local git listing
+    }
+
+    // Fallback: read from local flutter fork git branches
     final result = await git.forEachRef(
       format: '%(refname:short)',
       pattern: 'refs/remotes/origin/flutter_release/*',
