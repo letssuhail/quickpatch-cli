@@ -362,8 +362,8 @@ class QuickPatchFlutter {
       final body = await response.transform(utf8.decoder).join();
       client.close(force: false);
       if (response.statusCode == 200) {
-        final json = jsonDecode(body) as Map<String, dynamic>;
-        final versions = (json['versions'] as List).cast<String>();
+        final decoded = jsonDecode(body) as Map<String, dynamic>;
+        final versions = (decoded['versions'] as List).cast<String>();
         if (versions.isNotEmpty) return versions;
       }
     } on Exception {

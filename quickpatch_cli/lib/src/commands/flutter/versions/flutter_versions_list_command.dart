@@ -59,7 +59,7 @@ class FlutterVersionsListCommand extends QuickPatchCommand {
     }
 
     logger.info('📦 Flutter Versions');
-    for (final version in versions.reversed) {
+    for (final version in versions) {
       logger.info(
         version == currentVersion ? lightCyan.wrap('✓ $version') : '  $version',
       );

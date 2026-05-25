@@ -1,3 +1,7 @@
+## 1.6.109
+
+- **`flutter versions list`**: Show newest versions first. Remove `.reversed` since server already returns newest-first order.
+
 ## 1.6.108
 
 - **Fix `flutter versions list`**: Always fetch from production server using a fixed URL — previous version used the project-level `hostedUri` which caused silent fallback to local git branches.
