@@ -95,7 +95,7 @@ class CodePushClient {
          ...standardHeaders,
          ...?customHeaders,
        }),
-       hostedUri = hostedUri ?? (throw ArgumentError('QUICKPATCH_HOSTED_URL is not set. Export it before running quickpatch:\n  export QUICKPATCH_HOSTED_URL="https://quickpatch-server-production.up.railway.app"'));
+       hostedUri = hostedUri ?? (throw ArgumentError('QUICKPATCH_HOSTED_URL is not set.'));
 
   /// The standard headers applied to all requests.
   static const standardHeaders = <String, String>{'x-version': packageVersion};

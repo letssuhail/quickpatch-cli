@@ -318,9 +318,18 @@ Engine • revision ${quickpatchEnv.quickpatchEngineRevision}''');
         }
         return ExitCode.usage.code;
 
-      } on ArgumentError catch (e) {
+      } on ArgumentError {
+        const url = 'https://quickpatch-server-production.up.railway.app';
+        final isWindows = platform.isWindows;
         logger
-          ..err('${e.message}');
+          ..err('QUICKPATCH_HOSTED_URL is not set.')
+          ..info('')
+          ..info(isWindows
+              ? 'Run in PowerShell:'
+              : 'Add to your ~/.zshrc or ~/.bashrc:')
+          ..info(isWindows
+              ? '  \$env:QUICKPATCH_HOSTED_URL = "$url"'
+              : '  export QUICKPATCH_HOSTED_URL="$url"');
         return ExitCode.usage.code;
 
         // We explicitly want to catch all exceptions here to log them and show
