@@ -318,6 +318,11 @@ Engine • revision ${quickpatchEnv.quickpatchEngineRevision}''');
         }
         return ExitCode.usage.code;
 
+      } on ArgumentError catch (e) {
+        logger
+          ..err('${e.message}');
+        return ExitCode.usage.code;
+
         // We explicitly want to catch all exceptions here to log them and show
         // the user a friendly message.
         // ignore: avoid_catches_without_on_clauses
