@@ -346,25 +346,26 @@ class QuickPatchFlutter {
   /// what is actually mirrored in R2) so users only see versions we truly support.
   /// Falls back to local git branch listing if the server is unreachable.
   Future<List<String>> getVersions({String? revision}) async {
-    // Try server first — use configured URL or fall back to production default
-    final hostedUri = quickpatchEnv.hostedUri ??
-        Uri.parse('https://quickpatch-server-production.up.railway.app');
+    // Always hit production server — ignore project-level hostedUri so this
+    // command works even outside a quickpatch project directory.
+    const serverUrl =
+        'https://quickpatch-server-production.up.railway.app/api/v1/flutter-versions';
     try {
-      final uri = hostedUri.resolve('/api/v1/flutter-versions');
+      final uri = Uri.parse(serverUrl);
       final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 8);
       final request = await client.getUrl(uri);
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
       final response = await request.close().timeout(
         const Duration(seconds: 8),
       );
+      final body = await response.transform(utf8.decoder).join();
+      client.close(force: false);
       if (response.statusCode == 200) {
-        final body = await response.transform(utf8.decoder).join();
         final json = jsonDecode(body) as Map<String, dynamic>;
         final versions = (json['versions'] as List).cast<String>();
-        client.close();
         if (versions.isNotEmpty) return versions;
       }
-      client.close();
     } on Exception {
       // Fall through to local git listing
     }

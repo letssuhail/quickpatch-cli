@@ -1,3 +1,7 @@
+## 1.6.108
+
+- **Fix `flutter versions list`**: Always fetch from production server using a fixed URL — previous version used the project-level `hostedUri` which caused silent fallback to local git branches.
+
 ## 1.6.107
 
 - **`flutter versions list`**: Now fetches supported versions directly from your QuickPatch server instead of reading all Shorebird fork branches. Only versions mirrored in R2 are shown — the ones you actually support. Falls back to local git branch listing if server is unreachable.
