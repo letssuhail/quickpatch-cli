@@ -29,34 +29,40 @@ no reinstall.
 
 ## Installation
 
-**macOS / Linux**
+**Via pub.dev (recommended — macOS / Linux / Windows)**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/letssuhail/quickpatch/main/install.sh | bash
+dart pub global activate quickpatch_cli
 ```
 
-**Windows** (PowerShell)
+Make sure `~/.pub-cache/bin` (or `%APPDATA%\Pub\Cache\bin` on Windows) is on your `PATH`, then run `quickpatch --version`.
 
-```powershell
-irm https://raw.githubusercontent.com/letssuhail/quickpatch/main/install.ps1 | iex
+**Or download a pre-built binary**
+
+Grab the latest binary for your platform from the [GitHub Releases](https://github.com/letssuhail/quickpatch-cli/releases) page, extract it, and put it on your `PATH`.
+
+**Upgrade**
+
+```bash
+quickpatch upgrade
+# or run the same activate command again:
+dart pub global activate quickpatch_cli
 ```
-
-> Requires [git](https://git-scm.com/downloads). The first install downloads the
-> QuickPatch Flutter (~1 GB), so it can take a few minutes. Open a **new**
-> terminal afterwards, then run `quickpatch --version`.
 
 ## Quick start
 
 ```bash
-# 1. Point the CLI at your server (get a token from your QuickPatch dashboard)
-export QUICKPATCH_HOSTED_URL="https://your-server.example.com"
-export QUICKPATCH_TOKEN="qp_api_..."
+# 1. Log in (get an API key from https://quickpatch.vercel.app)
+quickpatch login
 
-# 2. In your Flutter project
+# 2. Point the CLI at your server
+export QUICKPATCH_HOSTED_URL="https://your-server.example.com"
+
+# 3. In your Flutter project
 quickpatch init
 quickpatch release android        # build + publish a release; upload to the store as usual
 
-# 3. Make a Dart change, then ship it over the air
+# 4. Make a Dart change, then ship it over the air
 quickpatch patch android --release-version=1.0.0+1
 ```
 
@@ -66,12 +72,15 @@ Your users' apps check for the patch on launch and apply it on the next one.
 
 | Command | Description |
 | --- | --- |
+| `quickpatch login` | Authenticate with your API key from the dashboard |
+| `quickpatch logout` | Remove stored credentials |
 | `quickpatch init` | Register the app and create `quickpatch.yaml` |
 | `quickpatch release android\|ios` | Build + publish a release (ship this to the store) |
 | `quickpatch patch android\|ios --release-version=<v>` | Publish an OTA patch for a release |
 | `quickpatch releases list` | List releases for the current app |
 | `quickpatch patches list` | List patches for the current app |
 | `quickpatch doctor` | Diagnose your setup |
+| `quickpatch upgrade` | Show how to upgrade to the latest version |
 
 ## What can be patched?
 
