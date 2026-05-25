@@ -1,7 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:json_annotation/json_annotation.dart';
-import 'package:jwt/src/models/jwk.dart';
-import 'package:jwt/src/models/public_key_store/public_key_store.dart';
+import 'package:quickpatch_jwt/src/models/jwk.dart';
+import 'package:quickpatch_jwt/src/models/public_key_store/public_key_store.dart';
 
 part 'jwk_key_store.g.dart';
 

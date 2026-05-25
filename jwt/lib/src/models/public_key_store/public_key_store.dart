@@ -1,7 +1,7 @@
-import 'package:jwt/src/jwks_format.dart';
-import 'package:jwt/src/models/public_key_store/jwk_key_store.dart';
-import 'package:jwt/src/models/public_key_store/key_value_key_store.dart';
-import 'package:jwt/src/models/public_key_store/rsa_jwk_key_store.dart';
+import 'package:quickpatch_jwt/src/jwks_format.dart';
+import 'package:quickpatch_jwt/src/models/public_key_store/jwk_key_store.dart';
+import 'package:quickpatch_jwt/src/models/public_key_store/key_value_key_store.dart';
+import 'package:quickpatch_jwt/src/models/public_key_store/rsa_jwk_key_store.dart';
 import 'package:pointycastle/pointycastle.dart' as pointycastle;
 
 /// {@template key_material}

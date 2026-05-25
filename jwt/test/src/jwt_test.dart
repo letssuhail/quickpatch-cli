@@ -5,9 +5,9 @@ import 'dart:typed_data';
 
 import 'package:clock/clock.dart';
 import 'package:http/http.dart';
-import 'package:jwt/jwt.dart';
-import 'package:jwt/src/models/public_key_store/public_key_store.dart';
-import 'package:jwt/src/models/public_key_store/rsa_jwk_key_store.dart';
+import 'package:quickpatch_jwt/jwt.dart';
+import 'package:quickpatch_jwt/src/models/public_key_store/public_key_store.dart';
+import 'package:quickpatch_jwt/src/models/public_key_store/rsa_jwk_key_store.dart';
 import 'package:path/path.dart' as p;
 import 'package:pointycastle/pointycastle.dart' as pc;
 import 'package:test/test.dart';

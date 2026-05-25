@@ -7,7 +7,7 @@ import 'package:cli_util/cli_util.dart';
 import 'package:googleapis_auth/auth_io.dart' as oauth2;
 import 'package:googleapis_auth/googleapis_auth.dart';
 import 'package:http/http.dart' as http;
-import 'package:jwt/jwt.dart';
+import 'package:quickpatch_jwt/quickpatch_jwt.dart';
 import 'package:mason_logger/mason_logger.dart';
 import 'package:path/path.dart' as p;
 import 'package:scoped_deps/scoped_deps.dart';

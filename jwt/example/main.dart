@@ -1,4 +1,4 @@
-import 'package:jwt/jwt.dart' as jwt;
+import 'package:quickpatch_jwt/jwt.dart' as jwt;
 
 Future<void> main() async {
   final token = await jwt.verify(

@@ -7,6 +7,7 @@ environment:
 workspace:
   - dex
   - jwt
+  # dex and jwt are now named quickpatch_dex and quickpatch_jwt for pub.dev
   - scoped_deps
   - quickpatch_build_trace
   - quickpatch_cli

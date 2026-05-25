@@ -1,6 +1,9 @@
-name: jwt
+name: quickpatch_jwt
 description: A Dart Json Web Token Library
 version: 1.0.0+1
+repository: https://github.com/letssuhail/quickpatch
+
+resolution: workspace
 
 environment:
   sdk: ">=3.8.0 <4.0.0"

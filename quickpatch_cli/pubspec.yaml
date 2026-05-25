@@ -4,6 +4,8 @@ version: 1.6.105
 repository: https://github.com/letssuhail/quickpatch-cli
 
 
+resolution: workspace
+
 environment:
   sdk: ">=3.8.0 <4.0.0"
 
@@ -16,7 +18,7 @@ dependencies:
   clock: ^1.1.2
   collection: ^1.19.1
   crypto: ^3.0.6
-  dex: ^0.1.0
+  quickpatch_dex: ^0.1.0
   equatable: ^2.0.8
   googleapis_auth: ^2.3.1
   http: ^1.5.0
@@ -24,7 +26,7 @@ dependencies:
   io: ^1.0.5
   json_annotation: ^4.12.0
   json_path: ^0.7.2
-  jwt: ^1.0.0+1
+  quickpatch_jwt: ^1.0.0+1
   mason_logger: ^0.3.5
   meta: ^1.16.0
   path: ^1.9.1

@@ -1,5 +1,5 @@
-import 'package:jwt/jwt.dart';
-import 'package:jwt/src/encoding.dart';
+import 'package:quickpatch_jwt/jwt.dart';
+import 'package:quickpatch_jwt/src/encoding.dart';
 
 /// {@template jwt}
 /// A JWT (json web token)

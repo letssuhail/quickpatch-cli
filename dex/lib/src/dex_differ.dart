@@ -1,4 +1,4 @@
-import 'package:dex/src/dex_parser.dart';
+import 'package:quickpatch_dex/src/dex_parser.dart';
 
 /// The kind of difference found between two DEX files.
 enum DexDifferenceKind {

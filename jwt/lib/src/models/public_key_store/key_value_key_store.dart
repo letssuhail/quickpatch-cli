@@ -1,4 +1,4 @@
-import 'package:jwt/src/models/public_key_store/public_key_store.dart';
+import 'package:quickpatch_jwt/src/models/public_key_store/public_key_store.dart';
 
 /// {@template key_value_key_store}
 /// A store for public keys of the form `id: value`. Google uses this format.

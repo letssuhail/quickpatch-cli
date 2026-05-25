@@ -1,6 +1,9 @@
-name: dex
+name: quickpatch_dex
 description: DEX binary parser and semantic differ for Android Dalvik Executable files.
 version: 0.1.0
+repository: https://github.com/letssuhail/quickpatch
+
+resolution: workspace
 
 environment:
   sdk: ">=3.8.0 <4.0.0"

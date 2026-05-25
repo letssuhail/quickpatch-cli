@@ -4,8 +4,8 @@ import 'dart:typed_data';
 
 import 'package:clock/clock.dart';
 import 'package:http/http.dart' as http;
-import 'package:jwt/jwt.dart';
-import 'package:jwt/src/models/public_key_store/public_key_store.dart';
+import 'package:quickpatch_jwt/jwt.dart';
+import 'package:quickpatch_jwt/src/models/public_key_store/public_key_store.dart';
 import 'package:meta/meta.dart';
 import 'package:pointycastle/pointycastle.dart';
 import 'package:rsa_pkcs/rsa_pkcs.dart' as rsa;

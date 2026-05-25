@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:googleapis_auth/auth_io.dart';
 import 'package:http/http.dart' as http;
-import 'package:jwt/jwt.dart';
+import 'package:quickpatch_jwt/quickpatch_jwt.dart';
 import 'package:mason_logger/mason_logger.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:platform/platform.dart';

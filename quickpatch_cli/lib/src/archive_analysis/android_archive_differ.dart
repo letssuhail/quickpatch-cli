@@ -2,7 +2,7 @@
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
-import 'package:dex/dex.dart';
+import 'package:quickpatch_dex/quickpatch_dex.dart';
 import 'package:path/path.dart' as p;
 import 'package:quickpatch_cli/src/archive_analysis/archive_differ.dart';
 import 'package:quickpatch_cli/src/archive_analysis/file_set_diff.dart';
