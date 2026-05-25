@@ -1,3 +1,3 @@
-## 1.6.105
+## 1.0.0+1
 
 - Initial public release.

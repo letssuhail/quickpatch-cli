@@ -4,10 +4,8 @@ description: >
   plumbing across flutter_tools, dart-sdk's aot_tools, and quickpatch_cli.
   Not intended for consumption outside of those projects.
 version: 0.1.0
-publish_to: none
 homepage: https://github.com/letssuhail/quickpatch
 repository: https://github.com/letssuhail/quickpatch/tree/main/packages/quickpatch_build_trace
-resolution: workspace
 
 environment:
   sdk: ">=3.8.0 <4.0.0"
