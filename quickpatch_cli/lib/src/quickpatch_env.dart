@@ -292,9 +292,9 @@ class QuickPatchEnv {
       platform.environment['QUICKPATCH_JWT_ISSUER'] ??
       'https://auth.quickpatch.dev';
 
-  /// The base URL for the QuickPatch code push server that overrides the default
-  /// used by [CodePushClient]. If none is provided, [CodePushClient] will use
-  /// its default.
+  /// The base URL for the QuickPatch code push server that overrides the
+  /// default used by [CodePushClient]. If none is provided, [CodePushClient]
+  /// will use its default.
   Uri? get hostedUri {
     try {
       // Prefer QUICKPATCH_HOSTED_URL, then quickpatch.yaml base_url.
