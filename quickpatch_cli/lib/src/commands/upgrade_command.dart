@@ -11,8 +11,10 @@ class UpgradeCommand extends QuickPatchCommand {
   @override
   String get description => 'Upgrade your copy of QuickPatch.';
 
+  static const String commandName = 'upgrade';
+
   @override
-  String get name => 'upgrade';
+  String get name => commandName;
 
   @override
   Future<int> run() async {
