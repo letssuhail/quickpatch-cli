@@ -30,9 +30,15 @@ class QuickPatchFlutter {
   /// The executable name.
   static const executable = 'flutter';
 
-  /// The QuickPatch Flutter fork git URL.
+  /// The Flutter git URL the CLI clones to install build-time Flutter.
+  ///
+  /// Points at upstream public Flutter. The revisions QuickPatch uses are plain
+  /// upstream commits (verified: same commit + identical bin/internal/engine.version
+  /// as the corresponding Shorebird flutter_release/* branch HEAD), so cloning
+  /// from flutter/flutter yields the exact build-time Flutter we need without
+  /// depending on any private/third-party fork.
   static const String flutterGitUrl =
-      'https://github.com/letssuhail/flutter.git';
+      'https://github.com/flutter/flutter.git';
 
   /// Arguments to pass to `flutter precache`.
   List<String> get precacheArgs => ['--android', if (platform.isMacOS) '--ios'];
