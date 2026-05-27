@@ -178,8 +178,10 @@ class Apple {
     // our --read_class_table_link_info_from reader. These are different binaries,
     // so allow overriding only the linker's gen_snapshot via env, leaving the
     // build's untouched.
-    final genSnapshot =
-        platform.environment['QUICKPATCH_LINKER_GEN_SNAPSHOT'] ??
+    final linkerGenSnapshotOverride =
+        platform.environment['QUICKPATCH_LINKER_GEN_SNAPSHOT'];
+    final usingQuickPatchLinker = linkerGenSnapshotOverride != null;
+    final genSnapshot = linkerGenSnapshotOverride ??
         quickpatchArtifacts.getArtifactPath(
           artifact: QuickPatchArtifact.genSnapshotIos,
         );
@@ -253,34 +255,41 @@ $error''');
       }
     }
 
-    // QuickPatch iOS linker: the base release's class-table link file sits
-    // next to the release snapshot (copied by copySupplementFilesToSnapshotDirs).
-    // Passing it pins patch class IDs to the base. The snapshot version embedded
-    // in the base release is forced onto the patch so the on-device VM (built
-    // from a different engine) accepts it.
-    final baseCtLink = File(
-      p.join(releaseArtifact.parent.path, 'App.ct.link'),
-    );
-    final baseLinkInfo = baseCtLink.existsSync() ? baseCtLink.path : null;
-    final snapshotVersion = _readSnapshotVersion(releaseArtifact);
-    if (baseLinkInfo != null) {
-      logger.detail('[linker] Using base class-table link: $baseLinkInfo');
-    }
-    if (snapshotVersion != null) {
-      logger.detail('[linker] Forcing snapshot version: $snapshotVersion');
-    }
+    // QuickPatch iOS linker extras — ONLY when our clean-room linker
+    // gen_snapshot is in use (QUICKPATCH_LINKER_GEN_SNAPSHOT set). The stock
+    // fork pipeline must not receive these flags: the fork's aot_tools.dill does
+    // not understand --base-link-info / --snapshot-version and aborts on them.
+    String? baseLinkInfo;
+    String? snapshotVersion;
+    String? kernelForLink;
+    if (usingQuickPatchLinker) {
+      // The base release's class-table link file sits next to the release
+      // snapshot (copied by copySupplementFilesToSnapshotDirs). Passing it pins
+      // patch class IDs to the base. The snapshot version embedded in the base
+      // is forced onto the patch so the on-device VM accepts it.
+      final baseCtLink = File(
+        p.join(releaseArtifact.parent.path, 'App.ct.link'),
+      );
+      baseLinkInfo = baseCtLink.existsSync() ? baseCtLink.path : null;
+      snapshotVersion = _readSnapshotVersion(releaseArtifact);
+      if (baseLinkInfo != null) {
+        logger.detail('[linker] Using base class-table link: $baseLinkInfo');
+      }
+      if (snapshotVersion != null) {
+        logger.detail('[linker] Forcing snapshot version: $snapshotVersion');
+      }
 
-    // Our clean-room gen_snapshot is built from PUBLIC Dart and cannot read
-    // kernel produced by the private fork frontend. When linking with our
-    // gen_snapshot, point the linker at a public-frontend-compiled dill of the
-    // same sources via QUICKPATCH_PUBLIC_DILL.
-    final publicDill = platform.environment['QUICKPATCH_PUBLIC_DILL'];
-    final kernelForLink = (publicDill != null && File(publicDill).existsSync())
-        ? publicDill
-        : kernelFile.path;
-    if (publicDill != null) {
-      logger.detail('[linker] Using public-frontend kernel: $kernelForLink');
+      // Our clean-room gen_snapshot is built from PUBLIC Dart and cannot read
+      // kernel produced by the private fork frontend. Point the linker at a
+      // public-frontend-compiled dill of the same sources via
+      // QUICKPATCH_PUBLIC_DILL when provided.
+      final publicDill = platform.environment['QUICKPATCH_PUBLIC_DILL'];
+      if (publicDill != null && File(publicDill).existsSync()) {
+        kernelForLink = publicDill;
+        logger.detail('[linker] Using public-frontend kernel: $kernelForLink');
+      }
     }
+    kernelForLink ??= kernelFile.path;
 
     try {
       linkPercentage = await aotTools.link(
