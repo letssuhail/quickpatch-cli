@@ -336,6 +336,8 @@ class AotTools {
     String? workingDirectory,
     String? dumpDebugInfoPath,
     int? ddMaxBytes,
+    String? baseLinkInfo,
+    String? snapshotVersion,
     List<String> additionalArgs = const [],
   }) async {
     // We use the json lines format. https://jsonlines.org
@@ -356,6 +358,11 @@ class AotTools {
           '--reporter=json',
           '--redirect-to=${p.join(outputDir, linkJson)}',
         ],
+        // QuickPatch iOS linker: pin patch class IDs to the base release and
+        // force the embedded snapshot version to match the base engine so the
+        // on-device VM accepts the patch.
+        if (baseLinkInfo != null) '--base-link-info=$baseLinkInfo',
+        if (snapshotVersion != null) '--snapshot-version=$snapshotVersion',
         if (ddMaxBytes != null) '--dd-max-bytes=$ddMaxBytes',
         if (dumpDebugInfoPath != null) '--dump-debug-info=$dumpDebugInfoPath',
         if (additionalArgs.isNotEmpty) ...['--', ...additionalArgs],

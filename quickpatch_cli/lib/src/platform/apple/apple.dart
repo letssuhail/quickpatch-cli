@@ -173,9 +173,16 @@ class Apple {
       return const LinkResult.failure();
     }
 
-    final genSnapshot = quickpatchArtifacts.getArtifactPath(
-      artifact: QuickPatchArtifact.genSnapshotIos,
-    );
+    // The IPA build uses the engine's stock gen_snapshot (which has the fork's
+    // --print_*_link_info_to writers). The LINK step needs a gen_snapshot with
+    // our --read_class_table_link_info_from reader. These are different binaries,
+    // so allow overriding only the linker's gen_snapshot via env, leaving the
+    // build's untouched.
+    final genSnapshot =
+        platform.environment['QUICKPATCH_LINKER_GEN_SNAPSHOT'] ??
+        quickpatchArtifacts.getArtifactPath(
+          artifact: QuickPatchArtifact.genSnapshotIos,
+        );
 
     final linkProgress = logger.progress('Linking AOT files');
     double? linkPercentage;
@@ -246,6 +253,35 @@ $error''');
       }
     }
 
+    // QuickPatch iOS linker: the base release's class-table link file sits
+    // next to the release snapshot (copied by copySupplementFilesToSnapshotDirs).
+    // Passing it pins patch class IDs to the base. The snapshot version embedded
+    // in the base release is forced onto the patch so the on-device VM (built
+    // from a different engine) accepts it.
+    final baseCtLink = File(
+      p.join(releaseArtifact.parent.path, 'App.ct.link'),
+    );
+    final baseLinkInfo = baseCtLink.existsSync() ? baseCtLink.path : null;
+    final snapshotVersion = _readSnapshotVersion(releaseArtifact);
+    if (baseLinkInfo != null) {
+      logger.detail('[linker] Using base class-table link: $baseLinkInfo');
+    }
+    if (snapshotVersion != null) {
+      logger.detail('[linker] Forcing snapshot version: $snapshotVersion');
+    }
+
+    // Our clean-room gen_snapshot is built from PUBLIC Dart and cannot read
+    // kernel produced by the private fork frontend. When linking with our
+    // gen_snapshot, point the linker at a public-frontend-compiled dill of the
+    // same sources via QUICKPATCH_PUBLIC_DILL.
+    final publicDill = platform.environment['QUICKPATCH_PUBLIC_DILL'];
+    final kernelForLink = (publicDill != null && File(publicDill).existsSync())
+        ? publicDill
+        : kernelFile.path;
+    if (publicDill != null) {
+      logger.detail('[linker] Using public-frontend kernel: $kernelForLink');
+    }
+
     try {
       linkPercentage = await aotTools.link(
         base: releaseArtifact.path,
@@ -254,9 +290,11 @@ $error''');
         genSnapshot: genSnapshot,
         outputPath: vmCodeFile.path,
         workingDirectory: buildDirectory.path,
-        kernel: kernelFile.path,
+        kernel: kernelForLink,
         dumpDebugInfoPath: dumpDebugInfoDir?.path,
         ddMaxBytes: ddMaxBytes,
+        baseLinkInfo: baseLinkInfo,
+        snapshotVersion: snapshotVersion,
         additionalArgs: splitDebugInfoArgs,
       );
     } on Exception catch (error) {
@@ -282,6 +320,22 @@ $error''');
       linkPercentage: linkPercentage,
       linkMetadata: linkMetadata,
     );
+  }
+
+  /// Reads the Dart snapshot version embedded in a release snapshot.
+  ///
+  /// The VM embeds the version as a 32-hex-char string immediately followed by
+  /// the features string (which begins with "product " in release builds), e.g.
+  /// `7d8fb82a698d78184f7d1e3bbc00540aproduct no-code_comments ...`. The patch
+  /// gen_snapshot is told to embed this same version so the on-device VM (built
+  /// from a different engine fork) accepts the patch. Returns null if not found.
+  String? _readSnapshotVersion(File snapshot) {
+    if (!snapshot.existsSync()) return null;
+    final bytes = snapshot.readAsBytesSync();
+    // Match a 32-char lowercase-hex run directly followed by "product ".
+    final pattern = RegExp(r'([0-9a-f]{32})product ');
+    final match = pattern.firstMatch(String.fromCharCodes(bytes));
+    return match?.group(1);
   }
 
   /// Parses the .xcscheme file to determine if it was created for an app
