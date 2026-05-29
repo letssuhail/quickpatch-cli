@@ -184,6 +184,11 @@ class Apple {
     // build's untouched.
     final linkerGenSnapshotOverride =
         platform.environment['QUICKPATCH_LINKER_GEN_SNAPSHOT'];
+    // DIRECT_LINK uses our linker too — via the cache gen_snapshot (the
+    // downloaded QuickPatch engine) when no explicit override is set. So the
+    // base-link-info / snapshot-version it needs must be resolved in that case
+    // as well, not only when QUICKPATCH_LINKER_GEN_SNAPSHOT is set.
+    final directLink = platform.environment['QUICKPATCH_DIRECT_LINK'] == '1';
     final usingQuickPatchLinker = linkerGenSnapshotOverride != null;
     final genSnapshot = linkerGenSnapshotOverride ??
         quickpatchArtifacts.getArtifactPath(
@@ -266,7 +271,7 @@ $error''');
     String? baseLinkInfo;
     String? snapshotVersion;
     String? kernelForLink;
-    if (usingQuickPatchLinker) {
+    if (usingQuickPatchLinker || directLink) {
       // The base release's class-table link file sits next to the release
       // snapshot (copied by copySupplementFilesToSnapshotDirs). Passing it pins
       // patch class IDs to the base. The snapshot version embedded in the base
@@ -301,7 +306,6 @@ $error''');
     // no Shorebird header prefix, so Dart_LoadELF reads from byte 0). This
     // unblocks patches without depending on the fork's aot_tools.dill, which
     // doesn't run on our public-dart-3.12 dartaotruntime.
-    final directLink = platform.environment['QUICKPATCH_DIRECT_LINK'] == '1';
     if (directLink) {
       if (baseLinkInfo == null) {
         linkProgress.fail(
