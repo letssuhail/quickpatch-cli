@@ -13,6 +13,7 @@ import 'package:quickpatch_cli/src/commands/patch/apple_patcher_mixin.dart';
 import 'package:quickpatch_cli/src/commands/patch/patcher.dart';
 import 'package:quickpatch_cli/src/common_arguments.dart';
 import 'package:quickpatch_cli/src/doctor.dart';
+import 'package:quickpatch_cli/src/engine_bootstrap.dart';
 import 'package:quickpatch_cli/src/executables/executables.dart';
 import 'package:quickpatch_cli/src/extensions/arg_results.dart';
 import 'package:quickpatch_cli/src/logging/logging.dart';
@@ -84,6 +85,10 @@ class IosPatcher extends Patcher
 
   @override
   Future<void> assertArgsAreValid() async {
+    // Ensure the prebuilt QuickPatch iOS engine for this Flutter revision is
+    // installed (download + verify from the CDN if missing) before we build.
+    await ensureQuickPatchIosEngine();
+
     final exportOptionsPlistFile = argResults.file(
       CommonArguments.exportOptionsPlistArg.name,
     );
@@ -225,7 +230,38 @@ For more information see: ${supportedFlutterVersionsUrl.toLink()}''');
     final patchBuildFile = File(useLinker ? _vmcodeOutputPath : _aotOutputPath);
 
     final File patchFile;
-    if (useLinker && await aotTools.isGeneratePatchDiffBaseSupported()) {
+    // QuickPatch DIRECT_LINK mode: bypass the fork's aot_tools.dill, but STILL
+    // produce the same stable diff base the on-device updater patches against.
+    // Our clean-room `analyze_snapshot --dump_blobs` writes the four base
+    // snapshot blobs (vm_data ++ isolate_data ++ vm_instructions ++
+    // isolate_instructions) in the exact order/sizes the device's
+    // SnapshotsDataHandle reads (shell/common/shorebird/snapshots_data_handle).
+    // Diffing against THAT — not the raw App Mach-O — is what makes the
+    // on-device bipatch reconstruct correctly (fixes the base_size mismatch).
+    final directLink = platform.environment['QUICKPATCH_DIRECT_LINK'] == '1';
+    if (directLink && useLinker) {
+      // Safety: a patch must be built with the SAME QuickPatch engine
+      // (snapshot revision) as the release it targets — the "freeze ONE
+      // toolchain" rule — or the on-device VM rejects it at load. Block early.
+      _assertEngineRevisionMatches(
+        releaseArtifact: releaseArtifactFile,
+        patchArtifact: patchBuildFile,
+      );
+
+      // Safety: on iOS the patch reuses the signed base instructions, so a
+      // patch that changes CODE would silently run stale base code. Block it.
+      _assertDataOnlyPatch(releaseArtifact: releaseArtifactFile);
+
+      final patchBaseFile = await _generateDirectLinkDiffBase(
+        releaseArtifact: releaseArtifactFile,
+      );
+      patchFile = File(
+        await artifactManager.createDiff(
+          releaseArtifactPath: patchBaseFile.path,
+          patchArtifactPath: patchBuildFile.path,
+        ),
+      );
+    } else if (useLinker && await aotTools.isGeneratePatchDiffBaseSupported()) {
       final patchBaseProgress = logger.progress('Generating patch diff base');
       final analyzeSnapshotPath = quickpatchArtifacts.getArtifactPath(
         artifact: QuickPatchArtifact.analyzeSnapshotIos,
@@ -269,6 +305,155 @@ For more information see: ${supportedFlutterVersionsUrl.toLink()}''');
         podfileLockHash: quickpatchEnv.iosPodfileLockHash,
       ),
     };
+  }
+
+  /// Engine-revision (snapshot hash) embedded in an AOT snapshot/App binary,
+  /// or null if not found. The 32-hex run directly precedes "product " in the
+  /// snapshot's version+features string and uniquely identifies the QuickPatch
+  /// engine/toolchain the artifact was built with.
+  String? _readEngineRevision(File f) {
+    if (!f.existsSync()) return null;
+    final match = RegExp(r'([0-9a-f]{32})product ')
+        .firstMatch(String.fromCharCodes(f.readAsBytesSync()));
+    return match?.group(1);
+  }
+
+  /// Enforcement of the "freeze ONE toolchain" rule: the patch's engine
+  /// revision must match the release's. A patch built with a different engine
+  /// embeds a different snapshot version, which the on-device VM rejects at
+  /// load (fail-open revert) — so we block it at publish time with a clear
+  /// ENGINE_MISMATCH error instead of shipping a patch that can never apply.
+  void _assertEngineRevisionMatches({
+    required File releaseArtifact,
+    required File patchArtifact,
+  }) {
+    final releaseRev = _readEngineRevision(releaseArtifact);
+    final patchRev = _readEngineRevision(patchArtifact);
+    if (releaseRev == null || patchRev == null) {
+      logger.warn(
+        'Cannot verify engine revision (release: $releaseRev, patch: '
+        '$patchRev). Proceeding without the check.',
+      );
+      return;
+    }
+    if (releaseRev == patchRev) {
+      logger.detail('[linker] engine revision matches release ($releaseRev).');
+      return;
+    }
+    logger.err('''
+ENGINE_MISMATCH: this patch was built with a different QuickPatch engine than
+the release it targets.
+  release engine revision: $releaseRev
+  patch engine revision:   $patchRev
+A patch must be built with the SAME engine/toolchain as its release, or the
+device will reject it at load. Rebuild the patch with the toolchain that
+produced this release (QuickPatch freezes one engine per release).''');
+    throw ProcessExit(ExitCode.software.code);
+  }
+
+  /// Safety gate for iOS instruction reuse. The patch reuses the signed base
+  /// app's instructions (Apple forbids executing new native code at runtime),
+  /// so a patch that changes compiled CODE would silently run stale base code
+  /// on device. We detect this by comparing the patch's Function-Instruction
+  /// Map (emitted by the linker as `out.dd_identity.link`) against the base
+  /// release's (`App.dd_identity.link`, copied next to the release snapshot).
+  /// Identical maps ⇒ instructions unchanged ⇒ a safe data-only patch.
+  void _assertDataOnlyPatch({required File releaseArtifact}) {
+    final baseFim = File(
+      p.join(releaseArtifact.parent.path, 'App.dd_identity.link'),
+    );
+    final patchFim = File(
+      p.join(quickpatchEnv.buildDirectory.path, 'out.dd_identity.link'),
+    );
+
+    if (!baseFim.existsSync() || !patchFim.existsSync()) {
+      logger.warn(
+        'Cannot verify iOS code-change safety: instruction map missing '
+        '(base: ${baseFim.existsSync()}, patch: ${patchFim.existsSync()}). '
+        'Proceeding without the check.',
+      );
+      return;
+    }
+
+    final baseHash = sha256.convert(baseFim.readAsBytesSync()).toString();
+    final patchHash = sha256.convert(patchFim.readAsBytesSync()).toString();
+    if (baseHash == patchHash) {
+      logger.detail(
+        '[linker] instruction map matches base — data-only patch (safe).',
+      );
+      return;
+    }
+
+    const message = '''
+This patch changes compiled CODE, not just data/config.
+
+On iOS a patch reuses the signed base app's instructions — Apple forbids
+executing new native code at runtime — so changed code will NOT take effect on
+device (the original code keeps running for changed functions). Only
+data/const/string/config changes are supported on iOS today.
+
+If you intended a data-only change, the difference is likely from a non-data
+edit (new/removed/reordered code or dependencies). Revert it and re-run.''';
+
+    final allowOverride =
+        platform.environment['QUICKPATCH_ALLOW_CODE_CHANGE'] == '1';
+    if (allowOverride) {
+      logger.warn(
+        '$message\n\nQUICKPATCH_ALLOW_CODE_CHANGE=1 is set — publishing anyway. '
+        'The code change will NOT apply on device.',
+      );
+      return;
+    }
+    logger.err(message);
+    throw ProcessExit(ExitCode.software.code);
+  }
+
+  /// DIRECT_LINK diff base: extract the base snapshot blobs from the release
+  /// App binary using our clean-room `analyze_snapshot --dump_blobs`, producing
+  /// the exact byte stream the on-device base reader patches against.
+  ///
+  /// The App.framework/App is usually a fat (universal) Mach-O, whose
+  /// `0xcafebabe` header our analyze_snapshot's magic sniffer doesn't recognize
+  /// (it expects a thin Mach-O), so we thin the arm64 slice first via `lipo`.
+  Future<File> _generateDirectLinkDiffBase({required File releaseArtifact}) async {
+    final progress = logger.progress('Generating patch diff base (dump_blobs)');
+    final tmpDir = Directory.systemTemp.createTempSync('qp_diff_base');
+    final analyzeSnapshotPath = quickpatchArtifacts.getArtifactPath(
+      artifact: QuickPatchArtifact.analyzeSnapshotIos,
+    );
+
+    // Thin to the arm64 slice if the App is a fat binary. `lipo -thin` fails on
+    // an already-thin binary, so fall back to the original path in that case.
+    var snapshotInput = releaseArtifact.path;
+    final thinPath = p.join(tmpDir.path, 'App.thin.arm64');
+    final lipo = await Process.run('lipo', [
+      '-thin',
+      'arm64',
+      releaseArtifact.path,
+      '-output',
+      thinPath,
+    ]);
+    if (lipo.exitCode == 0 && File(thinPath).existsSync()) {
+      snapshotInput = thinPath;
+    }
+
+    final outFile = File(p.join(tmpDir.path, 'diff_base'));
+    final result = await Process.run(analyzeSnapshotPath, [
+      '--dump_blobs',
+      '--out=${outFile.path}',
+      snapshotInput,
+    ]);
+    if (result.exitCode != 0 || !outFile.existsSync()) {
+      progress.fail(
+        'analyze_snapshot --dump_blobs failed (exit ${result.exitCode}): '
+        '${result.stderr}',
+      );
+      throw ProcessExit(ExitCode.software.code);
+    }
+    progress.complete(
+      'Generated patch diff base (${outFile.statSync().size} bytes)',
+    );
+    return outFile;
   }
 
   @override

@@ -13,8 +13,9 @@ PubspecEditor get pubspecEditor => read(pubspecEditorRef);
 /// A class that exposes APIs to edit the current project's `pubspec.yaml`.
 /// {@endtemplate}
 class PubspecEditor {
-  /// Adds shorebird.yaml to the assets section of the pubspec.yaml file.
-  /// Does nothing if the pubspec.yaml file already contains shorebird.yaml.
+  /// Adds quickpatch.yaml to the assets section of the pubspec.yaml file.
+  /// Does nothing if the pubspec.yaml file already contains quickpatch.yaml
+  /// (or the legacy shorebird.yaml).
   /// Does nothing if a flutter project root cannot be found.
   void addQuickPatchYamlToPubspecAssets() {
     if (quickpatchEnv.pubspecContainsQuickPatchYaml) return;
@@ -33,7 +34,7 @@ class PubspecEditor {
       editor.update(
         ['flutter'],
         {
-          'assets': ['shorebird.yaml'],
+          'assets': ['quickpatch.yaml'],
         },
       );
     } else {
@@ -41,11 +42,11 @@ class PubspecEditor {
       final existing = flutterMap['assets'];
       if (existing == null) {
         // `assets:` may be absent, or present but empty (null value).
-        editor.update(['flutter', 'assets'], ['shorebird.yaml']);
+        editor.update(['flutter', 'assets'], ['quickpatch.yaml']);
       } else {
         final assets = existing as List;
-        if (!assets.contains('shorebird.yaml')) {
-          editor.update(['flutter', 'assets'], [...assets, 'shorebird.yaml']);
+        if (!assets.contains('quickpatch.yaml')) {
+          editor.update(['flutter', 'assets'], [...assets, 'quickpatch.yaml']);
         }
       }
     }

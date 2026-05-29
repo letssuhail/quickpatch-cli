@@ -9,6 +9,7 @@ import 'package:quickpatch_cli/src/commands/release/apple_releaser_mixin.dart';
 import 'package:quickpatch_cli/src/commands/release/releaser.dart';
 import 'package:quickpatch_cli/src/common_arguments.dart';
 import 'package:quickpatch_cli/src/doctor.dart';
+import 'package:quickpatch_cli/src/engine_bootstrap.dart';
 import 'package:quickpatch_cli/src/extensions/arg_results.dart';
 import 'package:quickpatch_cli/src/flutter_version_constraints.dart';
 import 'package:quickpatch_cli/src/logging/logging.dart';
@@ -51,6 +52,10 @@ class IosReleaser extends Releaser with AppleReleaserMixin {
   @override
   Future<void> assertArgsAreValid() async {
     assertReleaseVersionFlagNotProvided();
+
+    // Ensure the prebuilt QuickPatch iOS engine for this Flutter revision is
+    // installed (download + verify from the CDN if missing) before we build.
+    await ensureQuickPatchIosEngine();
 
     await assertObfuscationIsSupported();
 

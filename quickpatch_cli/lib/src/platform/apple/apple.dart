@@ -59,6 +59,10 @@ class Apple {
       // DD table files for cascade limiter (produced by 2-pass release build).
       'App.dd.link',
       'App.dd_callers.link',
+      // QuickPatch Function-Instruction Map (base release's per-function
+      // instruction content hashes + offsets). Copied next to the release
+      // snapshot so the patcher can detect instruction (code) changes on iOS.
+      'App.dd_identity.link',
       // Per-slot DD resolution outcome diagnostic (TSV).
       'App.dd_resolution.tsv',
     ];
@@ -290,6 +294,67 @@ $error''');
       }
     }
     kernelForLink ??= kernelFile.path;
+
+    // QuickPatch direct-link mode (QUICKPATCH_DIRECT_LINK=1): bypass aot_tools
+    // entirely. Our self-hosted gen_snapshot writes a raw ELF that the on-device
+    // updater can load directly (our Shorebird_ReadLinkHeader shim returns 0 =
+    // no Shorebird header prefix, so Dart_LoadELF reads from byte 0). This
+    // unblocks patches without depending on the fork's aot_tools.dill, which
+    // doesn't run on our public-dart-3.12 dartaotruntime.
+    final directLink = platform.environment['QUICKPATCH_DIRECT_LINK'] == '1';
+    if (directLink) {
+      if (baseLinkInfo == null) {
+        linkProgress.fail(
+          'QUICKPATCH_DIRECT_LINK=1 but no App.ct.link found next to release. '
+          'Make sure the release was cut with our toolchain so .link files '
+          'were emitted alongside App.framework/App.',
+        );
+        return const LinkResult.failure();
+      }
+      try {
+        logger.detail(
+          '[linker] direct mode: invoking $genSnapshot with '
+          '--read_class_table_link_info_from=$baseLinkInfo on $kernelForLink '
+          '-> ${vmCodeFile.path}',
+        );
+        // Emit the patch's Function-Instruction Map so the patcher can compare
+        // it byte-for-byte against the base release's map and detect whether the
+        // patch changes any INSTRUCTIONS (vs. data-only). On iOS the patch
+        // reuses the signed base instructions, so a code change would silently
+        // run stale base code — the patcher blocks such patches.
+        final patchFimPath =
+            p.join(buildDirectory.path, 'out.dd_identity.link');
+        final result = await Process.run(genSnapshot, [
+          '--deterministic',
+          '--read_class_table_link_info_from=$baseLinkInfo',
+          '--print_dd_function_identity_to=$patchFimPath',
+          '--snapshot_kind=app-aot-elf',
+          '--elf=${vmCodeFile.path}',
+          '--strip',
+          kernelForLink,
+        ], workingDirectory: buildDirectory.path);
+        if (result.exitCode != 0) {
+          linkProgress.fail(
+            'Direct link gen_snapshot failed (exit ${result.exitCode}): '
+            '${result.stderr}',
+          );
+          return const LinkResult.failure();
+        }
+        // Print the QuickPatch: pinned ... line that gen_snapshot emitted to
+        // stdout so the user sees the pin count.
+        final pinned = (result.stdout as String)
+            .split('\n')
+            .firstWhere((l) => l.contains('QuickPatch: pinned'),
+                orElse: () => '');
+        if (pinned.isNotEmpty) logger.detail('[linker] $pinned');
+        linkProgress.complete('Linked AOT files (direct mode)');
+        // Direct mode can't easily compute link percentage; leave null.
+      } on Exception catch (error) {
+        linkProgress.fail('Direct link failed: $error');
+        return const LinkResult.failure();
+      }
+      return const LinkResult.success(linkPercentage: null);
+    }
 
     try {
       linkPercentage = await aotTools.link(

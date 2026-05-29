@@ -301,6 +301,7 @@ class CodePushClient {
     required String version,
     required String flutterRevision,
     String? flutterVersion,
+    String? engineRevision,
     String? displayName,
   }) async {
     final response = await _httpClient.post(
@@ -309,6 +310,8 @@ class CodePushClient {
         'version': version,
         'flutter_revision': flutterRevision,
         'flutter_version': ?flutterVersion,
+        // QuickPatch engine/toolchain identity; patches must match it.
+        'engine_revision': ?engineRevision,
         'display_name': ?displayName,
       }),
     );

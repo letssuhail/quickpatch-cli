@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:mason_logger/mason_logger.dart';
-import 'package:path/path.dart' as p;
 import 'package:quickpatch_cli/src/code_push_client_wrapper.dart';
 import 'package:quickpatch_cli/src/common_arguments.dart';
 import 'package:quickpatch_cli/src/config/config.dart';
@@ -406,28 +405,13 @@ app_id:
         .getQuickPatchYamlFile(cwd: projectRoot)
         .writeAsStringSync(yamlContents);
 
-    // The native engine loads its config from flutter_assets as `shorebird.yaml`.
-    // Mirror quickpatch.yaml -> shorebird.yaml so the engine initializes.
-    // This file is auto-generated and hidden from version control via .gitignore.
-    File(
-      p.join(projectRoot.path, 'shorebird.yaml'),
-    ).writeAsStringSync(yamlContents);
-
-    // Hide shorebird.yaml from the user's git history — it's auto-generated.
-    _ensureGitignored(projectRoot, 'shorebird.yaml');
+    // `quickpatch.yaml` is bundled directly as a flutter asset (added to
+    // pubspec by PubspecEditor) and the native engine reads it from
+    // flutter_assets. No separate shorebird.yaml mirror is created — QuickPatch
+    // is independent. (Legacy projects that still bundle shorebird.yaml keep
+    // working via quickpatchEnv.syncEngineConfig + the engine's fallback.)
 
     return QuickPatchYaml(appId: appId);
-  }
-
-  void _ensureGitignored(Directory projectRoot, String entry) {
-    final gitignoreFile = File(p.join(projectRoot.path, '.gitignore'));
-    final lines = gitignoreFile.existsSync()
-        ? gitignoreFile.readAsStringSync()
-        : '';
-    if (!lines.split('\n').map((l) => l.trim()).contains(entry)) {
-      final separator = lines.isNotEmpty && !lines.endsWith('\n') ? '\n' : '';
-      gitignoreFile.writeAsStringSync('$lines$separator$entry\n');
-    }
   }
 
   void _logAvailableOrganizations(
