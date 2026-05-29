@@ -238,7 +238,9 @@ For more information see: ${supportedFlutterVersionsUrl.toLink()}''');
     // SnapshotsDataHandle reads (shell/common/shorebird/snapshots_data_handle).
     // Diffing against THAT — not the raw App Mach-O — is what makes the
     // on-device bipatch reconstruct correctly (fixes the base_size mismatch).
-    final directLink = platform.environment['QUICKPATCH_DIRECT_LINK'] == '1';
+    // QuickPatch iOS reuse linker is the default; QUICKPATCH_DIRECT_LINK=0 opts
+    // out to the (fork) aot_tools diff-base path.
+    final directLink = platform.environment['QUICKPATCH_DIRECT_LINK'] != '0';
     if (directLink && useLinker) {
       // Safety: a patch must be built with the SAME QuickPatch engine
       // (snapshot revision) as the release it targets — the "freeze ONE

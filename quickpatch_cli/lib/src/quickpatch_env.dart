@@ -301,11 +301,14 @@ class QuickPatchEnv {
   /// will use its default.
   Uri? get hostedUri {
     try {
-      // Prefer QUICKPATCH_HOSTED_URL, then quickpatch.yaml base_url.
+      // Prefer QUICKPATCH_HOSTED_URL, then quickpatch.yaml base_url, then the
+      // hosted QuickPatch server (so a real user needs no env var; `init` works
+      // before a quickpatch.yaml exists). Override only for self-hosting.
       final baseUrl =
           platform.environment['QUICKPATCH_HOSTED_URL'] ??
-          getQuickPatchYaml()?.baseUrl;
-      return baseUrl == null ? null : Uri.tryParse(baseUrl);
+          getQuickPatchYaml()?.baseUrl ??
+          'https://quickpatch-server-production.up.railway.app';
+      return Uri.tryParse(baseUrl);
     } on Exception {
       return null;
     }

@@ -126,10 +126,12 @@ class Cache {
   String get storageBaseUrl {
     if (platform.environment['QUICKPATCH_STORAGE_BASE_URL'] case final v?)
       return v;
-    // Derive from QUICKPATCH_HOSTED_URL so users don't need a separate env var.
-    final hosted = platform.environment['QUICKPATCH_HOSTED_URL'];
-    if (hosted != null) return '$hosted/storage';
-    return 'https://storage.googleapis.com';
+    // Derive from the hosted server (env override, else the default QuickPatch
+    // server) so users don't need a separate env var.
+    final hosted =
+        platform.environment['QUICKPATCH_HOSTED_URL'] ??
+        'https://quickpatch-server-production.up.railway.app';
+    return '$hosted/storage';
   }
 
   /// The storage bucket host.

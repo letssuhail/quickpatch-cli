@@ -188,7 +188,10 @@ class Apple {
     // downloaded QuickPatch engine) when no explicit override is set. So the
     // base-link-info / snapshot-version it needs must be resolved in that case
     // as well, not only when QUICKPATCH_LINKER_GEN_SNAPSHOT is set.
-    final directLink = platform.environment['QUICKPATCH_DIRECT_LINK'] == '1';
+    // QuickPatch's iOS reuse linker is the default path; set
+    // QUICKPATCH_DIRECT_LINK=0 only to fall back to the (fork) aot_tools pipeline.
+    final directLink =
+        platform.environment['QUICKPATCH_DIRECT_LINK'] != '0';
     final usingQuickPatchLinker = linkerGenSnapshotOverride != null;
     final genSnapshot = linkerGenSnapshotOverride ??
         quickpatchArtifacts.getArtifactPath(
