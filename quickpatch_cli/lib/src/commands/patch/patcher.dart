@@ -158,6 +158,13 @@ More info: ${troubleshootingUrl.toLink()}.
   /// Whether to allow changes in native code (--allow-native-diffs).
   bool get allowNativeDiffs => argResults['allow-native-diffs'] == true;
 
+  /// Whether to build an arbitrary-code-push patch via the Dart interpreter
+  /// (dynamic modules) instead of the data-only AOT-diff path (--interpreter).
+  /// iOS only; requires the release to have an interpreter (bytecode) base.
+  bool get interpreterMode =>
+      argResults.options.contains('interpreter') &&
+      argResults['interpreter'] == true;
+
   /// Returns a function that signs data, or null if no signing is configured.
   Future<String> Function(String)? _resolveSigner() {
     final privateKeyFile = argResults.file(CommonArguments.privateKeyArg.name);

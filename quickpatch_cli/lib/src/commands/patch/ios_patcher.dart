@@ -15,6 +15,9 @@ import 'package:quickpatch_cli/src/common_arguments.dart';
 import 'package:quickpatch_cli/src/doctor.dart';
 import 'package:quickpatch_cli/src/engine_bootstrap.dart';
 import 'package:quickpatch_cli/src/executables/executables.dart';
+import 'package:quickpatch_cli/src/interpreter/interpreter_build.dart';
+import 'package:quickpatch_cli/src/interpreter/interpreter_patcher.dart';
+import 'package:quickpatch_cli/src/quickpatch_process.dart';
 import 'package:quickpatch_cli/src/extensions/arg_results.dart';
 import 'package:quickpatch_cli/src/logging/logging.dart';
 import 'package:quickpatch_cli/src/platform.dart';
@@ -124,6 +127,19 @@ For more information see: ${supportedFlutterVersionsUrl.toLink()}''');
       ...buildNameAndNumberArgsFromReleaseVersion(releaseVersion),
     ];
 
+    if (interpreterMode) {
+      // Match the interpreter release build's ergonomics: use CocoaPods (the
+      // verification deps break SPM resolution) and skip icon tree-shaking
+      // (ConstFinder crashes on the bootstrapper-style entry).
+      await process.run('flutter', [
+        'config',
+        '--no-enable-swift-package-manager',
+      ]);
+      if (!buildArgs.contains('--no-tree-shake-icons')) {
+        buildArgs.add('--no-tree-shake-icons');
+      }
+    }
+
     // If buildIpa is called with a different codesign value than the
     // release was, we will erroneously report native diffs.
     final ipaBuildResult = await artifactBuilder.buildIpa(
@@ -134,22 +150,28 @@ For more information see: ${supportedFlutterVersionsUrl.toLink()}''');
       base64PublicKey: argResults.encodedPublicKey,
     );
 
-    if (splitDebugInfoPath != null) {
-      Directory(splitDebugInfoPath!).createSync(recursive: true);
-    }
-    await artifactBuilder.buildElfAotSnapshot(
-      appDillPath: ipaBuildResult.kernelFile.path,
-      outFilePath: _aotOutputPath,
-      genSnapshotArtifact: QuickPatchArtifact.genSnapshotIos,
-      additionalArgs: [
-        ...ApplePatcherMixin.splitDebugInfoArgs(splitDebugInfoPath),
-        ...obfuscationGenSnapshotArgs,
-      ],
-    );
+    // The interpreter patch builds its own bytecode module in
+    // createPatchArtifacts and ignores the AOT diff entirely. The IPA build
+    // above is kept only to produce the .xcarchive (release-version + gate),
+    // so skip the unused AOT snapshot + kernel copy here.
+    if (!interpreterMode) {
+      if (splitDebugInfoPath != null) {
+        Directory(splitDebugInfoPath!).createSync(recursive: true);
+      }
+      await artifactBuilder.buildElfAotSnapshot(
+        appDillPath: ipaBuildResult.kernelFile.path,
+        outFilePath: _aotOutputPath,
+        genSnapshotArtifact: QuickPatchArtifact.genSnapshotIos,
+        additionalArgs: [
+          ...ApplePatcherMixin.splitDebugInfoArgs(splitDebugInfoPath),
+          ...obfuscationGenSnapshotArgs,
+        ],
+      );
 
-    // Copy the kernel file to the build directory so that it can be used
-    // to generate a patch.
-    ipaBuildResult.kernelFile.copySync(_appDillCopyPath);
+      // Copy the kernel file to the build directory so that it can be used
+      // to generate a patch.
+      ipaBuildResult.kernelFile.copySync(_appDillCopyPath);
+    }
 
     return artifactManager.getXcarchiveDirectory()!.zipToTempFile();
   }
@@ -165,6 +187,14 @@ For more information see: ${supportedFlutterVersionsUrl.toLink()}''');
     if (artifactManager.getXcarchiveDirectory()?.path == null) {
       logger.err('Unable to find .xcarchive directory');
       throw ProcessExit(ExitCode.software.code);
+    }
+
+    // Interpreter (arbitrary-code-push) path: build a bytecode patch module
+    // instead of the data-only AOT diff. Requires the release to have an
+    // interpreter (bytecode) base; the on-device merge-loader swaps the
+    // changed functions. Bypasses the data-only gate by design.
+    if (interpreterMode) {
+      return _createInterpreterPatchArtifacts();
     }
 
     final unzipProgress = logger.progress('Extracting release artifact');
@@ -456,6 +486,104 @@ edit (new/removed/reordered code or dependencies). Revert it and re-run.''';
       'Generated patch diff base (${outFile.statSync().size} bytes)',
     );
     return outFile;
+  }
+
+  /// Builds an iOS arbitrary-code-push patch via the Dart interpreter (dynamic
+  /// modules): compiles the changed app entry to an UNPREFIXED bytecode module
+  /// against a freshly-generated framework import-dill. The on-device
+  /// same-URI merge-loader swaps the changed functions onto the live app.
+  /// Bypasses the data-only gate — this IS a code change, shipped as bytecode.
+  ///
+  /// EXPERIMENTAL (--interpreter). Requires the release to have been built with
+  /// an interpreter (bytecode) base and the merge-loader engine
+  /// (QuickPatch engine >= 76ba1f79...). The toolchain ships in the iOS bundle.
+  Future<Map<Arch, PatchArtifactBundle>>
+  _createInterpreterPatchArtifacts() async {
+    final progress = logger.progress('Building interpreter (bytecode) patch');
+    final buildDir = quickpatchEnv.buildDirectory.path;
+
+    String tool(QuickPatchArtifact a) =>
+        quickpatchArtifacts.getArtifactPath(artifact: a);
+    final aotRuntime = tool(QuickPatchArtifact.dartAotRuntimeIos);
+    final dart2bytecode = tool(QuickPatchArtifact.dart2bytecodeIos);
+    final genKernel = tool(QuickPatchArtifact.genKernelIos);
+    final platformDill = tool(QuickPatchArtifact.flutterPlatformDillIos);
+    for (final f in [aotRuntime, dart2bytecode, genKernel, platformDill]) {
+      if (!File(f).existsSync()) {
+        progress.fail(
+          'Interpreter toolchain not installed ($f). This requires the '
+          'merge-loader QuickPatch engine — update the engine and retry.',
+        );
+        throw ProcessExit(ExitCode.software.code);
+      }
+    }
+
+    final packageConfig = p.join(
+      Directory.current.path,
+      '.dart_tool',
+      'package_config.json',
+    );
+    final entry = p.join(Directory.current.path, target ?? p.join('lib', 'main.dart'));
+
+    // 1. Generate a bootstrapper + its no-link import-dill (supplies the
+    //    framework so the patch module REFERENCES it, unprefixed).
+    File(p.join(buildDir, 'qp_bootstrap_main.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        InterpreterBuild.generateBootstrapperMain(),
+      );
+    final importDill = p.join(buildDir, 'qp_bootstrap_import.dill');
+    final genKernelResult = await process.run(
+      aotRuntime,
+      InterpreterBuild.genKernelArgs(
+        genKernelSnapshot: genKernel,
+        platformDill: platformDill,
+        packageConfig: packageConfig,
+        entry: p.join(buildDir, 'qp_bootstrap_main.dart'),
+        output: importDill,
+        noLinkPlatform: true,
+        product: true,
+      ),
+    );
+    if (genKernelResult.exitCode != 0) {
+      progress.fail('gen_kernel (bootstrapper) failed: ${genKernelResult.stderr}');
+      throw ProcessExit(ExitCode.software.code);
+    }
+
+    // 2. Compile the changed app entry → UNPREFIXED bytecode patch.
+    final patcher = InterpreterPatcher(
+      process: process,
+      aotRuntimePath: aotRuntime,
+      dart2bytecodeSnapshotPath: dart2bytecode,
+      platformDillPath: platformDill,
+    );
+    final File patchFile;
+    try {
+      patchFile = await patcher.buildBytecodePatch(
+        packageConfigPath: packageConfig,
+        importDillPath: importDill,
+        entry: entry,
+        outputPath: p.join(buildDir, 'out.qppatch'),
+      );
+    } on InterpreterPatchException catch (e) {
+      progress.fail(e.message);
+      throw ProcessExit(ExitCode.software.code);
+    }
+
+    final size = patchFile.statSync().size;
+    final hash = sha256.convert(patchFile.readAsBytesSync()).toString();
+    final hashSignature = await signHash(hash);
+    progress.complete('Interpreter patch built ($size bytes)');
+    return {
+      Arch.arm64: PatchArtifactBundle(
+        arch: 'aarch64',
+        path: patchFile.path,
+        hash: hash,
+        size: size,
+        hashSignature: hashSignature,
+        podfileLockHash: quickpatchEnv.iosPodfileLockHash,
+      ),
+    };
   }
 
   @override

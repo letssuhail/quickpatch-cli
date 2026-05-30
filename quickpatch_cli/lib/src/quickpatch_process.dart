@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:mason_logger/mason_logger.dart';
 import 'package:meta/meta.dart';
+import 'package:path/path.dart' as p;
 import 'package:scoped_deps/scoped_deps.dart';
 import 'package:quickpatch_cli/src/engine_config.dart';
 import 'package:quickpatch_cli/src/logging/logging.dart';
@@ -278,7 +279,17 @@ $stderr''');
       final flutterStorageBaseUrl = mirror != null
           ? '$mirror/download.quickpatch.dev'
           : 'https://download.quickpatch.dev';
-      return {'FLUTTER_STORAGE_BASE_URL': flutterStorageBaseUrl};
+      // Prepend the vended Flutter's bin to PATH so any `flutter`/`dart` the
+      // Flutter tool resolves via PATH internally (e.g. its post-build
+      // `which flutter` + `pub get`) is the QuickPatch-pinned one, not a
+      // different system Flutter that may not satisfy the app's SDK constraint.
+      final flutterBin = p.join(quickpatchEnv.flutterDirectory.path, 'bin');
+      final sep = platform.isWindows ? ';' : ':';
+      final currentPath = platform.environment['PATH'] ?? '';
+      return {
+        'FLUTTER_STORAGE_BASE_URL': flutterStorageBaseUrl,
+        'PATH': currentPath.isEmpty ? flutterBin : '$flutterBin$sep$currentPath',
+      };
     }
 
     return {};

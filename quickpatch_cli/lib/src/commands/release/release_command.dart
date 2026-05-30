@@ -125,6 +125,15 @@ Defaults to "latest" which builds using the latest stable Flutter version.''',
         hide: true,
         negatable: false,
       )
+      ..addFlag(
+        'interpreter',
+        negatable: false,
+        help: '''
+[EXPERIMENTAL] iOS only. Build an arbitrary-code-push (Dart interpreter)
+release: the app's own code ships as a bytecode module loaded by a generated
+bootstrapper, so subsequent `quickpatch patch ios --interpreter` patches can
+change CODE (not just data) and apply over-the-air.''',
+      )
       // Added for https://github.com/letssuhail/quickpatch/issues/3223.
       // Can be removed fall 2026 or later.
       ..addFlag(

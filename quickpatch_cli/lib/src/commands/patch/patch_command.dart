@@ -93,6 +93,14 @@ To target the latest release (e.g. the release that was most recently updated) u
         help: allowAssetDiffsHelpText,
         negatable: false,
       )
+      ..addFlag(
+        'interpreter',
+        negatable: false,
+        help: '''
+[EXPERIMENTAL] iOS only. Build an arbitrary-code-push patch via the Dart
+interpreter (dynamic modules) instead of the data-only AOT-diff path. Requires
+the release to have been built with the interpreter (bytecode) base.''',
+      )
       ..addOption(
         'track',
         help: 'The track to publish the patch to.',

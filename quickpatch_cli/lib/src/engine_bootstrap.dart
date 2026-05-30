@@ -10,8 +10,12 @@ import 'package:quickpatch_cli/src/quickpatch_env.dart';
 /// matches the engine, so a release + its patches + the engine must all share
 /// this revision. Extend this map when a new Flutter version is supported.
 const _engineRevisionForFlutterRevision = <String, String>{
+  // Re-baselined 2026-05-30 from dd03f6ff... to the merge-loader engine, which
+  // adds arbitrary-code-push (Dart interpreter / dynamic modules) ON TOP of the
+  // data-only instruction-reuse path — a strict superset. Releases + patches
+  // built against the old dd03f6ff engine must be rebuilt on this revision.
   '1a55eb72b61a6c8acac0bf7f7d4738f399f83a0f':
-      'dd03f6ff5f94f8a3fca41f85e66ad225',
+      '76ba1f79062a25f3e339546db98d259d',
 };
 
 /// Public base URL of the R2 bucket that hosts the prebuilt engine bundles.
@@ -90,6 +94,53 @@ Future<void> ensureQuickPatchIosEngine() async {
       File(p.join(src, tool)).copySync(p.join(cacheDir.path, tool));
       // Host tools must be (ad-hoc) signed to run on macOS.
       await Process.run('codesign', ['-f', '-s', '-', p.join(cacheDir.path, tool)]);
+    }
+
+    // Interpreter (arbitrary-code-push) toolchain, shipped in the bundle since
+    // the merge-loader engine. Optional for backwards-compat with older
+    // bundles that predate these files. Resolved via QuickPatchArtifact.
+    // {dart2bytecodeIos, genKernelIos, flutterPlatformDillIos,
+    // genInterfaceScriptIos}.
+    for (final tool in const [
+      'dart2bytecode.dart.snapshot',
+      'gen_kernel_aot.dart.snapshot',
+      'platform_strong.dill',
+      'gen_dynamic_interface.dart',
+      'gen_dynamic_interface.aot',
+      'dartaotruntime',
+    ]) {
+      final f = File(p.join(src, tool));
+      if (f.existsSync()) {
+        final dest = p.join(cacheDir.path, tool);
+        f.copySync(dest);
+        // dartaotruntime is an executable → must be (ad-hoc) signed on macOS.
+        if (tool == 'dartaotruntime') {
+          await Process.run('codesign', ['-f', '-s', '-', dest]);
+        }
+      }
+    }
+
+    // Overlay the merge-loader platform into the Flutter SDK's patched-sdk(s)
+    // so flutter build's frontend_server knows the interpreter natives
+    // (loadDynamicModulePatch) when compiling an --interpreter bootstrapper.
+    // Additive (the merge-loader platform is a superset of the stock one).
+    final mlPlatform = File(p.join(src, 'platform_strong.dill'));
+    if (mlPlatform.existsSync()) {
+      for (final sdk in ['flutter_patched_sdk', 'flutter_patched_sdk_product']) {
+        final dest = File(
+          p.join(
+            quickpatchEnv.flutterDirectory.path,
+            'bin', 'cache', 'artifacts', 'engine', 'common', sdk,
+            'platform_strong.dill',
+          ),
+        );
+        if (dest.parent.existsSync()) {
+          if (!File('${dest.path}.qpbak').existsSync() && dest.existsSync()) {
+            dest.copySync('${dest.path}.qpbak');
+          }
+          mlPlatform.copySync(dest.path);
+        }
+      }
     }
 
     stamp.writeAsStringSync(engineRevision);

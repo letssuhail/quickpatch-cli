@@ -101,6 +101,13 @@ abstract class Releaser {
   /// passed either to QuickPatch directly or forwarded to Flutter.
   bool get useObfuscation => argResults.flagPresent('obfuscate');
 
+  /// Whether to build an arbitrary-code-push (Dart interpreter / dynamic
+  /// modules) release: the app code ships as a bytecode module behind a
+  /// generated bootstrapper (--interpreter). iOS only.
+  bool get interpreterMode =>
+      argResults.options.contains('interpreter') &&
+      argResults['interpreter'] == true;
+
   /// DD table cascade byte threshold for the release build.
   ///
   /// Passed to Flutter tools via the SHOREBIRD_DD_MAX_BYTES environment
