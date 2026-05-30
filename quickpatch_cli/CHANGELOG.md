@@ -1,3 +1,10 @@
+## 1.6.111
+
+- **iOS arbitrary code push (`--interpreter`)**: release/patch iOS apps with arbitrary Dart changes (new widgets, screens, control-flow) over the air via an on-device Dart interpreter.
+- **Staged OTA**: interpreter patches are signature-verified, staged to disk on download, and applied at the next launch's first frame — no flash of the old UI, no live reassemble.
+- **`quickpatch upgrade`**: now performs a real git fast-forward + rebuild instead of printing an upgrade hint.
+- **Fix**: declare `asn1lib` as a direct dependency (used for patch-signature key parsing).
+
 ## 1.6.109
 
 - **`flutter versions list`**: Show newest versions first. Remove `.reversed` since server already returns newest-first order.
