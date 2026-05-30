@@ -1,3 +1,7 @@
+## 1.6.112
+
+- **Fix onboarding crash**: `quickpatch --version` and `quickpatch doctor` no longer fail with a cache-corrupted error on a fresh install before the pinned Flutter/engine is downloaded. The engine revision now falls back to the install-root pin, and both commands degrade to a readable "not installed (downloaded on first release/patch)" instead of throwing.
+
 ## 1.6.111
 
 - **iOS arbitrary code push (`--interpreter`)**: release/patch iOS apps with arbitrary Dart changes (new widgets, screens, control-flow) over the air via an on-device Dart interpreter.

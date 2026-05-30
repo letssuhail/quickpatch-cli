@@ -245,13 +245,26 @@ ${lightCyan.wrap('quickpatch release android -- --no-pub lib/main.dart')}''';
     int? exitCode;
     if (topLevelResults['version'] == true) {
       final flutterVersion = await _tryGetFlutterVersion();
+      // `--version` must never hard-fail just because the pinned Flutter/engine
+      // hasn't been downloaded yet (it is fetched lazily on the first
+      // release/patch). Fall back to a readable placeholder instead of throwing.
+      String? revOrNull(String Function() read) {
+        try {
+          return read();
+        } on Object {
+          return null;
+        }
+      }
+
+      final flutterRevision = revOrNull(() => quickpatchEnv.flutterRevision);
+      final engineRevision = revOrNull(() => quickpatchEnv.quickpatchEngineRevision);
       if (isJsonMode) {
         JsonResult.success(
           data: {
             'quickpatch_version': packageVersion,
             'flutter_version': flutterVersion,
-            'flutter_revision': quickpatchEnv.flutterRevision,
-            'engine_revision': quickpatchEnv.quickpatchEngineRevision,
+            'flutter_revision': flutterRevision,
+            'engine_revision': engineRevision,
           },
           command: 'version',
         ).write();
@@ -260,10 +273,11 @@ ${lightCyan.wrap('quickpatch release android -- --no-pub lib/main.dart')}''';
         if (flutterVersion != null) {
           quickpatchFlutterPrefix.write(' $flutterVersion');
         }
+        const notInstalled = 'not installed (downloaded on first release/patch)';
         logger.info('''
 QuickPatch $packageVersion • git@github.com:letssuhail/quickpatch.git
-$quickpatchFlutterPrefix • revision ${quickpatchEnv.flutterRevision}
-Engine • revision ${quickpatchEnv.quickpatchEngineRevision}''');
+$quickpatchFlutterPrefix • revision ${flutterRevision ?? notInstalled}
+Engine • revision ${engineRevision ?? notInstalled}''');
       }
       exitCode = ExitCode.success.code;
     } else {

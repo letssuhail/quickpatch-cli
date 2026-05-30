@@ -77,15 +77,27 @@ class QuickPatchEnv {
   }
 
   /// The QuickPatch engine revision.
+  ///
+  /// Prefers the `engine.version` inside the bootstrapped Flutter checkout
+  /// (authoritative once Flutter is installed). Before the first
+  /// `release`/`patch` clones Flutter, falls back to the pinned copy shipped at
+  /// the install root (`bin/internal/engine.version`) so commands like
+  /// `--version` work on a fresh install instead of throwing.
   String get quickpatchEngineRevision {
-    final file = File(
-      p.join(flutterDirectory.path, 'bin', 'internal', 'engine.version'),
-    );
-    try {
-      return file.readAsStringSync().trim();
-    } on FileSystemException {
-      throw CacheCorruptedException('Could not read ${file.path}.');
+    final candidates = [
+      File(p.join(flutterDirectory.path, 'bin', 'internal', 'engine.version')),
+      File(p.join(quickpatchRoot.path, 'bin', 'internal', 'engine.version')),
+    ];
+    for (final file in candidates) {
+      try {
+        if (file.existsSync()) return file.readAsStringSync().trim();
+      } on FileSystemException {
+        // Try the next candidate.
+      }
     }
+    throw CacheCorruptedException(
+      'Could not read engine.version from ${candidates.first.path}.',
+    );
   }
 
   /// Get the QuickPatch Flutter revision.

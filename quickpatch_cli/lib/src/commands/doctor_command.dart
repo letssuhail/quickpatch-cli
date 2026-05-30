@@ -43,6 +43,17 @@ class DoctorCommand extends QuickPatchCommand {
   @override
   String get description => 'Show information about the installed tooling.';
 
+  /// Reads a revision, returning a readable placeholder instead of throwing
+  /// when the pinned Flutter/engine has not been downloaded yet (it is fetched
+  /// lazily on the first release/patch), so `doctor` never hard-crashes.
+  String _revOrNotInstalled(String Function() read) {
+    try {
+      return read();
+    } on Object {
+      return 'not installed (downloaded on first release/patch)';
+    }
+  }
+
   @override
   Future<int> run() async {
     if (isJsonMode) return _runJson();
@@ -58,8 +69,8 @@ class DoctorCommand extends QuickPatchCommand {
     }
     output.writeln('''
 QuickPatch $packageVersion • git@github.com:letssuhail/quickpatch.git
-$quickpatchFlutterPrefix • revision ${quickpatchEnv.flutterRevision}
-Engine • revision ${quickpatchEnv.quickpatchEngineRevision}''');
+$quickpatchFlutterPrefix • revision ${_revOrNotInstalled(() => quickpatchEnv.flutterRevision)}
+Engine • revision ${_revOrNotInstalled(() => quickpatchEnv.quickpatchEngineRevision)}''');
 
     if (verbose) {
       final notDetected = red.wrap('not detected');
@@ -217,8 +228,8 @@ Android Toolchain
     emitJsonSuccess({
       'quickpatch_version': packageVersion,
       'flutter_version': flutterVersion,
-      'flutter_revision': quickpatchEnv.flutterRevision,
-      'engine_revision': quickpatchEnv.quickpatchEngineRevision,
+      'flutter_revision': _revOrNotInstalled(() => quickpatchEnv.flutterRevision),
+      'engine_revision': _revOrNotInstalled(() => quickpatchEnv.quickpatchEngineRevision),
       'android_toolchain': {
         'android_studio': androidStudio.path,
         'android_sdk': androidSdk.path,
