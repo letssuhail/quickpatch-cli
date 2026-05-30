@@ -32,9 +32,14 @@ Future<void> ensureQuickPatchIosEngine() async {
       platform.environment['QUICKPATCH_ENGINE_REV'] ??
       _engineRevisionForFlutterRevision[flutterRevision];
   if (engineRevision == null) {
-    logger.detail(
-      '[engine] No pinned QuickPatch engine for Flutter $flutterRevision; '
-      'using the existing cache as-is.',
+    final supported = _engineRevisionForFlutterRevision.keys.join(', ');
+    logger.warn(
+      '[engine] No QuickPatch iOS engine is published for Flutter revision '
+      '$flutterRevision, so iOS code push (especially --interpreter) will not '
+      'work on this version.\n'
+      'Supported Flutter revision(s): $supported\n'
+      'Run `quickpatch flutter versions list`, or build on a supported version '
+      'with `quickpatch release ios --flutter-version <version>`.',
     );
     return;
   }
