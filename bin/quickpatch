@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+#
+# QuickPatch wrapper. Lives at <checkout>/bin/quickpatch. Compiles the CLI
+# snapshot into bin/cache/quickpatch on first run and whenever the checked-out
+# git revision changes (e.g. after `quickpatch upgrade`), then execs it.
+set -euo pipefail
+
+WRAPPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+QUICKPATCH_ROOT="${QUICKPATCH_ROOT:-$(dirname "$WRAPPER_DIR")}"
+export QUICKPATCH_ROOT
+
+SNAPSHOT="$QUICKPATCH_ROOT/bin/cache/quickpatch"
+ENTRY="$QUICKPATCH_ROOT/quickpatch_cli/bin/quickpatch.dart"
+STAMP="$QUICKPATCH_ROOT/bin/cache/.quickpatch.revision"
+
+current_rev="$(git -C "$QUICKPATCH_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
+
+need_build=0
+[ -x "$SNAPSHOT" ] || need_build=1
+[ "$(cat "$STAMP" 2>/dev/null || echo none)" = "$current_rev" ] || need_build=1
+
+if [ "$need_build" = 1 ]; then
+  # Resolve a Dart SDK to build with: dart on PATH, the Flutter QuickPatch
+  # bootstraps under its cache, or a Flutter on PATH.
+  DART=""
+  if command -v dart >/dev/null 2>&1; then
+    DART="$(command -v dart)"
+  elif [ -x "$QUICKPATCH_ROOT/bin/cache/flutter/bin/dart" ]; then
+    DART="$QUICKPATCH_ROOT/bin/cache/flutter/bin/dart"
+  elif command -v flutter >/dev/null 2>&1; then
+    DART="$(dirname "$(command -v flutter)")/cache/dart-sdk/bin/dart"
+  fi
+  if [ -z "$DART" ] || [ ! -x "$DART" ]; then
+    echo "quickpatch: a Dart or Flutter SDK is required to build the CLI." >&2
+    echo "Install Flutter (https://flutter.dev) and try again." >&2
+    exit 1
+  fi
+
+  mkdir -p "$QUICKPATCH_ROOT/bin/cache"
+  ( cd "$QUICKPATCH_ROOT/quickpatch_cli" && "$DART" pub get >/dev/null )
+  "$DART" compile exe "$ENTRY" -o "$SNAPSHOT" >/dev/null
+  echo "$current_rev" > "$STAMP"
+fi
+
+exec "$SNAPSHOT" "$@"
