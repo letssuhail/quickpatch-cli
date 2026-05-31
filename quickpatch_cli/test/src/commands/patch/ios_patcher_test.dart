@@ -23,6 +23,7 @@ import 'package:quickpatch_cli/src/logging/logging.dart';
 import 'package:quickpatch_cli/src/metadata/metadata.dart';
 import 'package:quickpatch_cli/src/os/operating_system_interface.dart';
 import 'package:quickpatch_cli/src/patch_diff_checker.dart';
+import 'package:quickpatch_cli/src/platform.dart';
 import 'package:quickpatch_cli/src/platform/platform.dart';
 import 'package:quickpatch_cli/src/release_type.dart';
 import 'package:quickpatch_cli/src/quickpatch_artifacts.dart';
@@ -47,6 +48,7 @@ void main() {
     late Apple apple;
     late ArgParser argParser;
     late ArgResults argResults;
+    late Platform platform;
     late ArtifactBuilder artifactBuilder;
     late ArtifactManager artifactManager;
     late CodePushClientWrapper codePushClientWrapper;
@@ -83,6 +85,7 @@ void main() {
           loggerRef.overrideWith(() => logger),
           osInterfaceRef.overrideWith(() => operatingSystemInterface),
           patchDiffCheckerRef.overrideWith(() => patchDiffChecker),
+          platformRef.overrideWith(() => platform),
           processRef.overrideWith(() => quickpatchProcess),
           quickpatchArtifactsRef.overrideWith(() => quickpatchArtifacts),
           quickpatchEnvRef.overrideWith(() => quickpatchEnv),
@@ -108,6 +111,11 @@ void main() {
       apple = MockApple();
       argParser = MockArgParser();
       argResults = MockArgResults();
+      platform = MockPlatform();
+      // createPatchArtifacts defaults to direct-link mode; these tests exercise
+      // the aot_tools linker path, selected with QUICKPATCH_DIRECT_LINK=0.
+      when(() => platform.environment)
+          .thenReturn(const {'QUICKPATCH_DIRECT_LINK': '0'});
       artifactBuilder = MockArtifactBuilder();
       artifactManager = MockArtifactManager();
       codePushClientWrapper = MockCodePushClientWrapper();
