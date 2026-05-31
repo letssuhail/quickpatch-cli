@@ -48,7 +48,10 @@ void main() {
       quickpatchEnv = MockQuickPatchEnv();
 
       when(() => logger.progress(any())).thenReturn(progress);
-      when(() => platform.environment).thenReturn({});
+      // runLinker defaults to direct-link mode; these tests exercise the
+      // aot_tools.link fallback path, selected with QUICKPATCH_DIRECT_LINK=0.
+      when(() => platform.environment)
+          .thenReturn({'QUICKPATCH_DIRECT_LINK': '0'});
 
       when(
         () => aotTools.getLinkMetadata(
@@ -702,7 +705,10 @@ Otherwise, to repair macos, run "flutter create . --platforms macos"''',
             codemagicExportDir = Directory.systemTemp.createTempSync();
             when(
               () => platform.environment,
-            ).thenReturn({'CM_EXPORT_DIR': codemagicExportDir.path});
+            ).thenReturn({
+              'CM_EXPORT_DIR': codemagicExportDir.path,
+              'QUICKPATCH_DIRECT_LINK': '0',
+            });
           });
 
           test('copies debug info to codemagic exports', () async {
@@ -730,7 +736,10 @@ Otherwise, to repair macos, run "flutter create . --platforms macos"''',
           test('gracefully handles errors', () async {
             when(
               () => platform.environment,
-            ).thenReturn({'CM_EXPORT_DIR': 'invalid path'});
+            ).thenReturn({
+              'CM_EXPORT_DIR': 'invalid path',
+              'QUICKPATCH_DIRECT_LINK': '0',
+            });
             await runWithOverrides(
               () => apple.runLinker(
                 aotOutputFile: aotOutputFile,
