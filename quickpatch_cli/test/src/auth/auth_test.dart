@@ -174,7 +174,7 @@ void main() {
     // }
     // cspell:disable-next-line
     const quickpatchIdToken =
-        '''eyJhbGciOiJIUzI1NiIsImtpZCI6IjEyMzQiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2F1dGguc2hvcmViaXJkLmRldiIsImF1ZCI6InNob3JlYmlyZCIsInN1YiI6IjEyMzQ1IiwiZW1haWwiOiJ0ZXN0QGVtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJpYXQiOjEyMzQsImV4cCI6Njc4OX0.dGVzdA''';
+        '''eyJhbGciOiJIUzI1NiIsImtpZCI6IjEyMzQiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2F1dGgucXVpY2twYXRjaC5kZXYiLCJhdWQiOiJxdWlja3BhdGNoIiwic3ViIjoiMTIzNDUiLCJlbWFpbCI6InRlc3RAZW1haWwuY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsImlhdCI6MTIzNCwiZXhwIjo2Nzg5fQ.dGVzdA''';
     const quickpatchCiToken = CiToken(
       refreshToken: 'sb_rt_test',
       authProvider: AuthProvider.quickpatch,
@@ -842,7 +842,7 @@ void main() {
       group('when SHOREBIRD_TOKEN is an API key', () {
         setUp(() {
           when(() => platform.environment).thenReturn(<String, String>{
-            quickpatchTokenEnvVar: 'sb_api_abc123',
+            quickpatchTokenEnvVar: 'qp_api_abc123',
           });
         });
 
@@ -862,7 +862,7 @@ void main() {
 
         test('trims whitespace from API key', () {
           when(() => platform.environment).thenReturn(<String, String>{
-            quickpatchTokenEnvVar: '  sb_api_abc123  \n',
+            quickpatchTokenEnvVar: '  qp_api_abc123  \n',
           });
           auth = buildAuth();
           expect(auth.isAuthenticated, isTrue);
@@ -891,7 +891,7 @@ void main() {
           final request = captured.first as http.BaseRequest;
           expect(
             request.headers['Authorization'],
-            equals('Bearer sb_api_abc123'),
+            equals('Bearer qp_api_abc123'),
           );
         });
 
@@ -921,7 +921,7 @@ void main() {
             verify(
               () => logger.err(
                 'Failed to parse $quickpatchTokenEnvVar. Expected an API key '
-                '(sb_api_...) or a legacy CI token.',
+                '(qp_api_...) or a legacy CI token.',
               ),
             ).called(1);
             verifyNever(
@@ -970,7 +970,7 @@ void main() {
         ).called(1);
         verify(
           () => logger.warn(
-            'SHOREBIRD_TOKEN contains a legacy CI token from '
+            'QUICKPATCH_TOKEN contains a legacy CI token from '
             '`quickpatch login:ci`. '
             'This format is deprecated and will stop working in a future '
             'release. '
@@ -1030,7 +1030,7 @@ void main() {
         'throws UserAlreadyLoggedInException when authenticated via API key',
         () async {
           when(() => platform.environment).thenReturn(<String, String>{
-            quickpatchTokenEnvVar: 'sb_api_abc123',
+            quickpatchTokenEnvVar: 'qp_api_abc123',
           });
           auth = buildAuth();
 
@@ -1128,7 +1128,7 @@ void main() {
       group('when authenticated via API key', () {
         setUp(() {
           when(() => platform.environment).thenReturn(<String, String>{
-            quickpatchTokenEnvVar: 'sb_api_abc123',
+            quickpatchTokenEnvVar: 'qp_api_abc123',
           });
           auth = buildAuth();
         });

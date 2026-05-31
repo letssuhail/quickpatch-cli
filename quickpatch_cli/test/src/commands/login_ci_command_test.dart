@@ -51,7 +51,7 @@ void main() {
       final message = captured.single as String;
       expect(message, contains('quickpatch login:ci has been replaced'));
       expect(message, contains('console.quickpatch.dev'));
-      expect(message, contains('SHOREBIRD_TOKEN'));
+      expect(message, contains('QUICKPATCH_TOKEN'));
       expect(message, contains('docs.quickpatch.dev/account/api-keys'));
     });
 
