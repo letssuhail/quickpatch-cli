@@ -17,8 +17,11 @@ import 'mocks.dart';
 
 void main() {
   group('QuickPatchProcess', () {
-    const flutterStorageBaseUrlEnv = {
+    final flutterStorageBaseUrlEnv = {
       'FLUTTER_STORAGE_BASE_URL': 'https://download.quickpatch.dev',
+      // The vended Flutter's bin is prepended to PATH so the Flutter tool's
+      // internal `which flutter`/`pub get` resolve the pinned Flutter.
+      'PATH': p.join('bin', 'cache', 'flutter', 'bin'),
     };
 
     late EngineConfig engineConfig;
@@ -57,6 +60,9 @@ void main() {
       when(
         () => quickpatchEnv.flutterBinaryFile,
       ).thenReturn(File(p.join('bin', 'cache', 'flutter', 'bin', 'flutter')));
+      when(
+        () => quickpatchEnv.flutterDirectory,
+      ).thenReturn(Directory(p.join('bin', 'cache', 'flutter')));
 
       when(() => runProcessResult.stderr).thenReturn('stderr');
       when(() => runProcessResult.stdout).thenReturn('stdout');
@@ -65,6 +71,7 @@ void main() {
       when(() => logger.level).thenReturn(Level.info);
 
       when(() => platform.isWindows).thenReturn(false);
+      when(() => platform.environment).thenReturn(const {});
     });
 
     test('QuickPatchProcessResult can be instantiated as a const', () {

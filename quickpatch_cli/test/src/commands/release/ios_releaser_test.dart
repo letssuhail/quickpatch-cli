@@ -103,10 +103,14 @@ void main() {
       xcodeBuild = MockXcodeBuild();
 
       when(() => argResults.rest).thenReturn([]);
+      when(() => argResults.options).thenReturn(const []);
       when(() => argResults.wasParsed(any())).thenReturn(false);
       when(() => argResults['flutter-version']).thenReturn('latest');
 
       when(() => logger.progress(any())).thenReturn(progress);
+      // assertArgsAreValid -> ensureQuickPatchIosEngine reads flutterRevision;
+      // a revision with no pinned engine makes it a no-op in tests.
+      when(() => quickpatchEnv.flutterRevision).thenReturn('deadbeef');
 
       iosReleaser = IosReleaser(
         argResults: argResults,

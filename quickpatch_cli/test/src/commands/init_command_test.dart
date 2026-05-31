@@ -139,6 +139,7 @@ environment:
       when(() => logger.progress(any())).thenReturn(progress);
       when(() => gradlew.productFlavors(any())).thenAnswer((_) async => {});
       when(() => platform.isMacOS).thenReturn(true);
+      when(() => platform.environment).thenReturn(const {});
       when(() => quickpatchEnv.hasPubspecYaml).thenReturn(true);
       when(
         () => quickpatchEnv.getPubspecYaml(),

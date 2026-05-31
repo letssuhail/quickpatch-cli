@@ -132,6 +132,9 @@ void main() {
       when(() => argResults.options).thenReturn([]);
       when(() => argResults.rest).thenReturn([]);
       when(() => argResults.wasParsed(any())).thenReturn(false);
+      // assertArgsAreValid -> ensureQuickPatchIosEngine reads flutterRevision;
+      // a revision with no pinned engine makes it a no-op in tests.
+      when(() => quickpatchEnv.flutterRevision).thenReturn('deadbeef');
 
       when(() => logger.progress(any())).thenReturn(progress);
 

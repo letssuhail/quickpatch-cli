@@ -773,7 +773,7 @@ dependencies:
       test('returns hosted url from env if available', () {
         when(
           () => platform.environment,
-        ).thenReturn({'SHOREBIRD_HOSTED_URL': 'https://example.com'});
+        ).thenReturn({'QUICKPATCH_HOSTED_URL': 'https://example.com'});
         expect(
           runWithOverrides(() => quickpatchEnv.hostedUri),
           equals(Uri.parse('https://example.com')),
@@ -794,8 +794,14 @@ base_url: https://example.com''');
         );
       });
 
-      test('returns null when there is no env override or quickpatch.yaml', () {
-        expect(runWithOverrides(() => quickpatchEnv.hostedUri), isNull);
+      test('defaults to the hosted QuickPatch server when there is no env '
+          'override or quickpatch.yaml', () {
+        expect(
+          runWithOverrides(() => quickpatchEnv.hostedUri),
+          equals(
+            Uri.parse('https://quickpatch-server-production.up.railway.app'),
+          ),
+        );
       });
 
       test('returns null when unable to read quickpatch.yaml', () {
@@ -908,7 +914,7 @@ base_url: https://example.com''');
 
       test('returns issuer from env var when set', () {
         when(() => platform.environment).thenReturn({
-          'SHOREBIRD_JWT_ISSUER': 'https://custom-issuer.example.com',
+          'QUICKPATCH_JWT_ISSUER': 'https://custom-issuer.example.com',
         });
         expect(
           runWithOverrides(() => quickpatchEnv.jwtIssuer),
