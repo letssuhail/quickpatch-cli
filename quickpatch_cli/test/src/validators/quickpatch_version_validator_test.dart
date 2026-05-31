@@ -44,7 +44,8 @@ void main() {
     });
 
     test(
-      'returns an error when quickpatch version cannot be determined',
+      'skips the check silently when the version cannot be determined '
+      '(e.g. a binary install that is not a git checkout)',
       () async {
         when(
           quickpatchVersion.isLatest,
@@ -52,12 +53,7 @@ void main() {
 
         final results = await runWithOverrides(validator.validate);
 
-        expect(results, hasLength(1));
-        expect(results.first.severity, ValidationIssueSeverity.error);
-        expect(
-          results.first.message,
-          contains('Failed to get quickpatch version'),
-        );
+        expect(results, isEmpty);
       },
     );
 
