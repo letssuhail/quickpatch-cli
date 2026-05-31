@@ -40,6 +40,9 @@ void main() {
 
       when(() => auth.isAuthenticated).thenReturn(false);
       when(() => auth.client).thenReturn(httpClient);
+      // `login` prompts for an API key via the logger, then validates it.
+      when(() => logger.prompt(any())).thenReturn('qp_api_test');
+      when(() => auth.loginWithApiKey(any())).thenAnswer((_) async {});
       when(
         () => auth.credentialsFilePath,
       ).thenReturn(p.join(applicationConfigHome.path, 'credentials.json'));
@@ -105,65 +108,49 @@ void main() {
       });
     });
 
-    test('exits with code 70 if no user is found', () async {
+    test('exits with usage code when the API key format is invalid', () async {
+      when(() => logger.prompt(any())).thenReturn('not-a-valid-key');
+
+      final result = await runWithOverrides(command.run);
+      expect(result, equals(ExitCode.usage.code));
+
+      verify(
+        () => logger.err(any(that: contains('Invalid API key format'))),
+      ).called(1);
+      verifyNever(() => auth.loginWithApiKey(any()));
+    });
+
+    test('exits with code 70 when the API key is not recognized', () async {
       when(
-        () => auth.login(prompt: any(named: 'prompt')),
-      ).thenThrow(UserNotFoundException(email: email));
+        () => auth.loginWithApiKey(any()),
+      ).thenThrow(ApiKeyNotFoundException());
 
       final result = await runWithOverrides(command.run);
       expect(result, equals(ExitCode.software.code));
 
       verify(
-        () => logger.err('We could not find a QuickPatch account for $email.'),
-      ).called(1);
-      verify(
-        () => logger.info(any(that: contains('console.quickpatch.dev'))),
+        () => logger.err(any(that: contains('API key not recognized'))),
       ).called(1);
     });
 
     test('exits with code 70 when error occurs', () async {
       final error = Exception('oops something went wrong!');
-      when(
-        () => auth.login(prompt: any(named: 'prompt')),
-      ).thenThrow(error);
+      when(() => auth.loginWithApiKey(any())).thenThrow(error);
 
       final result = await runWithOverrides(command.run);
       expect(result, equals(ExitCode.software.code));
 
-      verify(() => auth.login(prompt: any(named: 'prompt'))).called(1);
+      verify(() => auth.loginWithApiKey(any())).called(1);
       verify(() => logger.err(error.toString())).called(1);
     });
 
     test('exits with code 0 when logged in successfully', () async {
-      when(
-        () => auth.login(prompt: any(named: 'prompt')),
-      ).thenAnswer((_) async {});
-      when(() => auth.email).thenReturn(email);
-
       final result = await runWithOverrides(command.run);
       expect(result, equals(ExitCode.success.code));
 
-      verify(() => auth.login(prompt: any(named: 'prompt'))).called(1);
+      verify(() => auth.loginWithApiKey('qp_api_test')).called(1);
       verify(
-        () => logger.info(
-          any(that: contains('You are now logged in as <$email>.')),
-        ),
-      ).called(1);
-    });
-
-    test('prompt is correct', () {
-      const url = 'http://example.com';
-      runWithOverrides(() => command.prompt(url));
-
-      verify(
-        () => logger.info('''
-The QuickPatch CLI needs your authorization to manage apps, releases, and patches on your behalf.
-
-In a browser, visit this URL to log in:
-
-${styleBold.wrap(styleUnderlined.wrap(lightCyan.wrap(url)))}
-
-Waiting for your authorization...'''),
+        () => logger.info(any(that: contains('You are now logged in.'))),
       ).called(1);
     });
   });

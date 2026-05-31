@@ -88,8 +88,8 @@ void main() {
           () => quickpatchFlutter.getVersions(),
           () => progress.cancel(),
           () => logger.info('📦 Flutter Versions'),
-          () => logger.info('  1.0.1'),
           () => logger.info('  1.0.0'),
+          () => logger.info('  1.0.1'),
         ]);
       },
     );
@@ -114,8 +114,8 @@ void main() {
         () => quickpatchFlutter.getVersions(),
         () => progress.cancel(),
         () => logger.info('📦 Flutter Versions'),
-        () => logger.info('  1.0.1'),
         () => logger.info(lightCyan.wrap('✓ 1.0.0')),
+        () => logger.info('  1.0.1'),
       ]);
     });
 
