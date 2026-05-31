@@ -1,6 +1,7 @@
 // cspell:words revis
 import 'dart:io';
 
+import 'package:http/http.dart' as http;
 import 'package:mason_logger/mason_logger.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:path/path.dart' as p;
@@ -8,6 +9,7 @@ import 'package:platform/platform.dart';
 import 'package:pub_semver/pub_semver.dart';
 import 'package:scoped_deps/scoped_deps.dart';
 import 'package:quickpatch_cli/src/executables/executables.dart';
+import 'package:quickpatch_cli/src/http_client/http_client.dart';
 import 'package:quickpatch_cli/src/logging/logging.dart';
 import 'package:quickpatch_cli/src/platform.dart';
 import 'package:quickpatch_cli/src/quickpatch_env.dart';
@@ -24,6 +26,7 @@ void main() {
     late Directory quickpatchRoot;
     late Directory flutterDirectory;
     late Git git;
+    late http.Client httpClient;
     late QuickPatchLogger logger;
     late Platform platform;
     late Progress progress;
@@ -38,6 +41,7 @@ void main() {
         body,
         values: {
           gitRef.overrideWith(() => git),
+          httpClientRef.overrideWith(() => httpClient),
           loggerRef.overrideWith(() => logger),
           platformRef.overrideWith(() => platform),
           processRef.overrideWith(() => process),
@@ -50,6 +54,13 @@ void main() {
       quickpatchRoot = Directory.systemTemp.createTempSync();
       flutterDirectory = Directory(p.join(quickpatchRoot.path, 'flutter'));
       git = MockGit();
+      httpClient = MockHttpClient();
+      // The flutter-versions endpoint is unreachable in tests, so getVersions
+      // falls back to the local git listing the tests stub.
+      registerFallbackValue(Uri.parse('https://example.com'));
+      when(
+        () => httpClient.get(any(), headers: any(named: 'headers')),
+      ).thenThrow(const SocketException('no network in tests'));
       logger = MockQuickPatchLogger();
       progress = MockProgress();
       quickpatchEnv = MockQuickPatchEnv();
@@ -817,12 +828,7 @@ $revision
       });
     });
 
-    // TODO(quickpatch): getVersions now fetches from the live flutter-versions
-    // endpoint via a non-injectable HttpClient before the git fallback, so
-    // these tests make a real network call and bypass the git mocks. Re-enable
-    // once the HTTP client is injectable (or the endpoint is overridable).
-    group('getVersions', skip: 'getVersions hits a live endpoint; needs an '
-        'injectable HTTP client to unit-test', () {
+    group('getVersions', () {
       const format = '%(refname:short)';
       const pattern = 'refs/remotes/origin/flutter_release/*';
       test('returns a list of versions', () async {

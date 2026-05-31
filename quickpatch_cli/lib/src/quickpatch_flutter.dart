@@ -8,6 +8,7 @@ import 'package:scoped_deps/scoped_deps.dart';
 import 'package:quickpatch_cli/src/executables/executables.dart';
 import 'package:quickpatch_cli/src/extensions/version.dart';
 import 'package:quickpatch_cli/src/flutter_version_constraints.dart';
+import 'package:quickpatch_cli/src/http_client/http_client.dart';
 import 'package:quickpatch_cli/src/logging/logging.dart';
 import 'package:quickpatch_cli/src/platform.dart';
 import 'package:quickpatch_cli/src/quickpatch_env.dart';
@@ -357,18 +358,14 @@ class QuickPatchFlutter {
     const serverUrl =
         'https://quickpatch-server-production.up.railway.app/api/v1/flutter-versions';
     try {
-      final uri = Uri.parse(serverUrl);
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 8);
-      final request = await client.getUrl(uri);
-      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
-      final response = await request.close().timeout(
-        const Duration(seconds: 8),
-      );
-      final body = await response.transform(utf8.decoder).join();
-      client.close(force: false);
+      final response = await httpClient
+          .get(
+            Uri.parse(serverUrl),
+            headers: const {'accept': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 8));
       if (response.statusCode == 200) {
-        final decoded = jsonDecode(body) as Map<String, dynamic>;
+        final decoded = jsonDecode(response.body) as Map<String, dynamic>;
         final versions = (decoded['versions'] as List).cast<String>();
         if (versions.isNotEmpty) return versions;
       }
