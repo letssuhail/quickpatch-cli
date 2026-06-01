@@ -149,7 +149,12 @@ of the iOS app that is using this module. (aar and ios-framework only)''',
       ..addMultiOption(
         'target-platform',
         help: 'The target platform(s) for which the app is compiled.',
-        defaultsTo: Arch.values.map((arch) => arch.targetPlatformCliArg),
+        // Default to the ABIs we publish a matching engine for: arm64 + x64
+        // cover every modern device and emulator. 32-bit armeabi-v7a is still
+        // allowed (forward-compat) but not built by default — no engine is
+        // published for it yet, so a default release should not ship it.
+        defaultsTo: const [Arch.arm64, Arch.x86_64]
+            .map((arch) => arch.targetPlatformCliArg),
         allowed: Arch.values.map((arch) => arch.targetPlatformCliArg),
       )
       ..addOption(
