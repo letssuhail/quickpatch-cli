@@ -77,6 +77,16 @@ Map<String, String>? buildEnvironment({
   if (base64PublicKey != null) {
     env['SHOREBIRD_PUBLIC_KEY'] = base64PublicKey;
   }
+  // Forward additional trusted public keys (comma-separated) used for
+  // signing-key rotation. The on-device updater accepts a patch whose
+  // signature verifies against the primary key OR any of these, so a
+  // rotated key can be trusted before the old key is retired. Forwarded
+  // explicitly so it reaches the Flutter build subprocess regardless of
+  // parent-environment propagation.
+  final rotationPublicKeys = Platform.environment['SHOREBIRD_PUBLIC_KEYS'];
+  if (rotationPublicKeys != null && rotationPublicKeys.isNotEmpty) {
+    env['SHOREBIRD_PUBLIC_KEYS'] = rotationPublicKeys;
+  }
   if (ddMaxBytes != null) {
     env['SHOREBIRD_DD_MAX_BYTES'] = ddMaxBytes.toString();
   }

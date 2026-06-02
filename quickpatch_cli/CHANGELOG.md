@@ -1,3 +1,8 @@
+## 1.6.116
+
+- **Patch signing fix (security)**: ensure the patch public key is embedded into the app before every Android and iOS build, so on-device patch **signature verification is actually enforced**. Previously the key could be omitted for QuickPatch projects, leaving the on-device updater unable to verify patches (effectively unsigned). Device-verified on a physical Android device: a patch signed with an **untrusted key is now rejected** at boot ("Patch signature is invalid"), while one signed with the trusted key applies normally. Applied automatically and idempotently, so existing installs are fixed on the next build.
+- Forward additional trusted public keys (for signing-key rotation) to the build environment, so a rotated key can be trusted before the old one is retired.
+
 ## 1.6.115
 
 - **Self-host without an env var**: the storage/mirror base URL now falls back to `quickpatch.yaml`'s `base_url` (after the `QUICKPATCH_HOSTED_URL` env override, before the hosted default), so a `base_url` in your config is enough to point both the build-time engine downloads and the on-device updater at your own server — no manual `QUICKPATCH_HOSTED_URL` export. With neither set, behaviour is unchanged.

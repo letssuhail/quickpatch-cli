@@ -162,6 +162,69 @@ Future<void> ensureQuickPatchIosEngine() async {
   }
 }
 
+/// Ensures the cloned Flutter SDK's `flutter_tools` embeds the patch public key
+/// into a QuickPatch project's `quickpatch.yaml` asset.
+///
+/// The upstream Flutter fork's asset pipeline only injected the build-time
+/// public key into its own legacy config filename, not `quickpatch.yaml`. Since
+/// QuickPatch projects use `quickpatch.yaml`, the public key was never embedded
+/// and the on-device updater ran fail-open: UNSIGNED patches applied. We consume
+/// the Flutter SDK at a pinned upstream revision we don't own, so the fix is
+/// applied to the local checkout at build time — idempotently. When it patches,
+/// it deletes the compiled `flutter_tools` snapshot so the change is recompiled
+/// on the next `flutter` run (Flutter keys that snapshot on the SDK revision,
+/// which is unchanged, so it must be removed to force a rebuild).
+void ensureQuickPatchFlutterToolsPatched() {
+  final assetsTarget = File(
+    p.join(
+      quickpatchEnv.flutterDirectory.path,
+      'packages', 'flutter_tools', 'lib', 'src', 'build_system', 'targets',
+      'assets.dart',
+    ),
+  );
+  if (!assetsTarget.existsSync()) return;
+  final source = assetsTarget.readAsStringSync();
+  if (source.contains("file.basename == 'quickpatch.yaml'")) {
+    return; // already patched — idempotent, no snapshot invalidation
+  }
+  // Match the upstream fork's asset-injection guard generically — a
+  // `file.basename == '<name>.yaml'` test — rather than hard-coding the
+  // upstream config filename, so the fix survives the filename changing across
+  // Flutter revisions. The replacement points it at QuickPatch's config file.
+  final guard = RegExp(r"if \(file\.basename == '\w+\.yaml'\) \{");
+  final matches = guard.allMatches(source).length;
+  if (matches != 1) {
+    // 0 → the asset pipeline changed shape; >1 → the injection site is
+    // ambiguous (which guard is the one we want?). Either way do NOT guess on a
+    // signing-critical path — surface it rather than risk a fail-open build or
+    // patching the wrong line. This is the per-Flutter-revision safety net.
+    logger.warn(
+      '[engine] Could not apply the QuickPatch patch-signing fix: expected '
+      "exactly one config-asset guard in flutter_tools' assets.dart but found "
+      '$matches. Patches for this Flutter revision may be built WITHOUT an '
+      'embedded public key (unsigned). Please report this so the fix can be '
+      'updated for this revision.',
+    );
+    return;
+  }
+  assetsTarget.writeAsStringSync(
+    source.replaceFirst(guard, "if (file.basename == 'quickpatch.yaml') {"),
+  );
+  for (final name in const ['flutter_tools.snapshot', 'flutter_tools.stamp']) {
+    final f = File(
+      p.join(quickpatchEnv.flutterDirectory.path, 'bin', 'cache', name),
+    );
+    if (f.existsSync()) {
+      try {
+        f.deleteSync();
+      } on FileSystemException {
+        // best-effort; a stale snapshot only means the fix lands one run later
+      }
+    }
+  }
+  logger.detail('[engine] Applied QuickPatch patch-signing fix to flutter_tools.');
+}
+
 Future<void> _run(
   String exe,
   List<String> args, {

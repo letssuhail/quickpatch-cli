@@ -7,6 +7,7 @@ import 'package:quickpatch_cli/src/code_push_client_wrapper.dart';
 import 'package:quickpatch_cli/src/commands/release/release.dart';
 import 'package:quickpatch_cli/src/commands/release/releaser.dart';
 import 'package:quickpatch_cli/src/doctor.dart';
+import 'package:quickpatch_cli/src/engine_bootstrap.dart';
 import 'package:quickpatch_cli/src/extensions/arg_results.dart';
 import 'package:quickpatch_cli/src/logging/logging.dart';
 import 'package:quickpatch_cli/src/metadata/metadata.dart';
@@ -106,6 +107,10 @@ Please comment and upvote ${link(uri: Uri.parse('https://github.com/letssuhail/q
     }
 
     await assertObfuscationIsSupported();
+
+    // Ensure flutter_tools embeds the patch public key (else patches ship
+    // unsigned / fail-open). Idempotent; applied before any build.
+    ensureQuickPatchFlutterToolsPatched();
   }
 
   @override

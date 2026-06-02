@@ -11,6 +11,7 @@ import 'package:quickpatch_cli/src/artifact_manager.dart';
 import 'package:quickpatch_cli/src/code_push_client_wrapper.dart';
 import 'package:quickpatch_cli/src/commands/patch/patcher.dart';
 import 'package:quickpatch_cli/src/doctor.dart';
+import 'package:quickpatch_cli/src/engine_bootstrap.dart';
 import 'package:quickpatch_cli/src/extensions/arg_results.dart';
 import 'package:quickpatch_cli/src/logging/logging.dart';
 import 'package:quickpatch_cli/src/patch_diff_checker.dart';
@@ -66,6 +67,13 @@ See more info about the issue ${link(uri: Uri.parse('https://github.com/letssuha
     allowAssetChanges: allowAssetDiffs,
     allowNativeChanges: allowNativeDiffs,
   );
+
+  @override
+  Future<void> assertArgsAreValid() async {
+    // Ensure flutter_tools embeds the patch public key (else patches ship
+    // unsigned / fail-open). Idempotent; applied before the patch build.
+    ensureQuickPatchFlutterToolsPatched();
+  }
 
   @override
   Future<void> assertPreconditions() async {

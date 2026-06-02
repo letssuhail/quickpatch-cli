@@ -60,6 +60,10 @@ class IosReleaser extends Releaser with AppleReleaserMixin {
     // installed (download + verify from the CDN if missing) before we build.
     await ensureQuickPatchIosEngine();
 
+    // Ensure flutter_tools embeds the patch public key (else patches ship
+    // unsigned / fail-open). Idempotent; applied before any build.
+    ensureQuickPatchFlutterToolsPatched();
+
     await assertObfuscationIsSupported();
 
     final exportOptionsPlistFile = argResults.file(

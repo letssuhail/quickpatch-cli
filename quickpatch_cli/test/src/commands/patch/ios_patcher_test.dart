@@ -131,6 +131,11 @@ void main() {
       quickpatchArtifacts = MockQuickPatchArtifacts();
       quickpatchProcess = MockQuickPatchProcess();
       quickpatchEnv = MockQuickPatchEnv();
+      // Default: no Flutter SDK on disk → ensureQuickPatchFlutterToolsPatched()
+      // (called from assertArgsAreValid) returns early instead of touching it.
+      when(
+        () => quickpatchEnv.flutterDirectory,
+      ).thenReturn(Directory('/qp-test-no-flutter'));
       quickpatchFlutter = MockQuickPatchFlutter();
       quickpatchValidator = MockQuickPatchValidator();
       xcodeBuild = MockXcodeBuild();

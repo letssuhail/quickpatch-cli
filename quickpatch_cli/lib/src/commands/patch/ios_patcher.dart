@@ -92,6 +92,10 @@ class IosPatcher extends Patcher
     // installed (download + verify from the CDN if missing) before we build.
     await ensureQuickPatchIosEngine();
 
+    // Ensure flutter_tools embeds the patch public key (else patches ship
+    // unsigned / fail-open). Idempotent; applied before any build.
+    ensureQuickPatchFlutterToolsPatched();
+
     final exportOptionsPlistFile = argResults.file(
       CommonArguments.exportOptionsPlistArg.name,
     );
