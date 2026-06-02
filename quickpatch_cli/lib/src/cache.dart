@@ -126,10 +126,12 @@ class Cache {
   String get storageBaseUrl {
     if (platform.environment['QUICKPATCH_STORAGE_BASE_URL'] case final v?)
       return v;
-    // Derive from the hosted server (env override, else the default QuickPatch
-    // server) so users don't need a separate env var.
+    // Derive from the hosted server (env override → quickpatch.yaml base_url →
+    // the default QuickPatch server) so users don't need a separate env var:
+    // a `base_url` in quickpatch.yaml is enough to point builds at a self-host.
     final hosted =
         platform.environment['QUICKPATCH_HOSTED_URL'] ??
+        quickpatchEnv.configuredBaseUrl ??
         'https://quickpatch-server-production.up.railway.app';
     return '$hosted/storage';
   }

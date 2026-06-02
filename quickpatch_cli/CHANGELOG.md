@@ -1,3 +1,7 @@
+## 1.6.115
+
+- **Self-host without an env var**: the storage/mirror base URL now falls back to `quickpatch.yaml`'s `base_url` (after the `QUICKPATCH_HOSTED_URL` env override, before the hosted default), so a `base_url` in your config is enough to point both the build-time engine downloads and the on-device updater at your own server — no manual `QUICKPATCH_HOSTED_URL` export. With neither set, behaviour is unchanged.
+
 ## 1.6.114
 
 - **Fix `--version` reporting**: `version.dart` was not bumped in the previous two releases, so `quickpatch --version` (and the `x-cli-version` request header) reported a stale version. Now synced to the package version.

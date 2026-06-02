@@ -288,6 +288,22 @@ class QuickPatchEnv {
       platform.environment['QUICKPATCH_JWT_ISSUER'] ??
       'https://auth.quickpatch.dev';
 
+  /// The `base_url` configured in the project's `quickpatch.yaml`, or `null`
+  /// when there is no project config or the file cannot be read/parsed.
+  ///
+  /// Safe to call from anywhere — it never throws on a missing or malformed
+  /// config. This is the single fallback every server/storage URL uses after
+  /// `QUICKPATCH_HOSTED_URL`, so self-hosters only need `base_url` in
+  /// `quickpatch.yaml` (no manual env var) for builds and the on-device
+  /// updater to all target their server.
+  String? get configuredBaseUrl {
+    try {
+      return getQuickPatchYaml()?.baseUrl;
+    } on Exception {
+      return null;
+    }
+  }
+
   /// The base URL for the QuickPatch code push server that overrides the
   /// default used by [CodePushClient]. If none is provided, [CodePushClient]
   /// will use its default.

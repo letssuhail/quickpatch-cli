@@ -184,6 +184,36 @@ void main() {
         ).called(1);
       });
 
+      test('routes engine downloads through the mirror derived from '
+          'quickpatch.yaml base_url when no env override', () async {
+        when(
+          () => quickpatchEnv.configuredBaseUrl,
+        ).thenReturn('https://self-host.test');
+
+        await runWithOverrides(
+          () => quickpatchProcess.run('flutter', [
+            '--version',
+          ], workingDirectory: '~'),
+        );
+
+        verify(
+          () => processWrapper.run(
+            any(
+              that: contains(
+                p.join('bin', 'cache', 'flutter', 'bin', 'flutter'),
+              ),
+            ),
+            ['--version'],
+            environment: {
+              'FLUTTER_STORAGE_BASE_URL':
+                  'https://self-host.test/storage/download.quickpatch.dev',
+              'PATH': p.join('bin', 'cache', 'flutter', 'bin'),
+            },
+            workingDirectory: '~',
+          ),
+        ).called(1);
+      });
+
       test('Updates environment if useVendedFlutter is true', () async {
         await runWithOverrides(
           () => quickpatchProcess.run(

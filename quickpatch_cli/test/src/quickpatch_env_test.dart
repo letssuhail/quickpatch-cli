@@ -821,6 +821,48 @@ base_url: https://example.com''');
       });
     });
 
+    group('configuredBaseUrl', () {
+      test('returns base_url from quickpatch.yaml', () {
+        final directory = Directory.systemTemp.createTempSync();
+        File(p.join(directory.path, 'quickpatch.yaml')).writeAsStringSync('''
+app_id: test-id
+base_url: https://self-host.example.com''');
+        expect(
+          IOOverrides.runZoned(
+            () => runWithOverrides(() => quickpatchEnv.configuredBaseUrl),
+            getCurrentDirectory: () => directory,
+          ),
+          equals('https://self-host.example.com'),
+        );
+      });
+
+      test('returns null when there is no quickpatch.yaml', () {
+        final directory = Directory.systemTemp.createTempSync();
+        expect(
+          IOOverrides.runZoned(
+            () => runWithOverrides(() => quickpatchEnv.configuredBaseUrl),
+            getCurrentDirectory: () => directory,
+          ),
+          isNull,
+        );
+      });
+
+      test('returns null (never throws) when quickpatch.yaml is unreadable', () {
+        final directory = Directory.systemTemp.createTempSync();
+        // Not valid utf8 so readAsString throws.
+        File(
+          p.join(directory.path, 'quickpatch.yaml'),
+        ).writeAsBytesSync([999999999999]);
+        expect(
+          IOOverrides.runZoned(
+            () => runWithOverrides(() => quickpatchEnv.configuredBaseUrl),
+            getCurrentDirectory: () => directory,
+          ),
+          isNull,
+        );
+      });
+    });
+
     group('canAcceptUserInput', () {
       late Stdin stdin;
 

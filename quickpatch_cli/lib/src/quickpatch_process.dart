@@ -271,8 +271,13 @@ $stderr''');
       // QuickPatch: when QUICKPATCH_STORAGE_BASE_URL is set, route Flutter's
       // engine downloads through our R2 mirror (mirror serves the
       // download.quickpatch.dev bucket under that path).
-      // Resolve storage base: explicit override → derive from hosted URL → GCS.
-      final hostedUrl = platform.environment['QUICKPATCH_HOSTED_URL'];
+      // Resolve storage base: explicit override → hosted URL (env, else
+      // quickpatch.yaml base_url) → GCS. The base_url fallback means a
+      // self-host configured only in quickpatch.yaml routes here with no env
+      // var; with neither set, hostedUrl stays null and we hit GCS directly.
+      final hostedUrl =
+          platform.environment['QUICKPATCH_HOSTED_URL'] ??
+          quickpatchEnv.configuredBaseUrl;
       final mirror =
           platform.environment['QUICKPATCH_STORAGE_BASE_URL'] ??
           (hostedUrl != null ? '$hostedUrl/storage' : null);

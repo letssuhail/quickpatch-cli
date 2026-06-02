@@ -118,6 +118,7 @@ void main() {
         () => quickpatchEnv.flutterRevision,
       ).thenReturn('test-flutter-revision');
       when(() => quickpatchEnv.quickpatchRoot).thenReturn(quickpatchRoot);
+      when(() => quickpatchEnv.configuredBaseUrl).thenReturn(null);
 
       when(() => platform.environment).thenReturn({});
       setMockPlatform(Platform.macOS);
@@ -190,6 +191,50 @@ void main() {
         expect(quickpatchCacheDirectory.existsSync(), isFalse);
         unawaited(runWithOverrides(cache.clear));
         expect(quickpatchCacheDirectory.existsSync(), isFalse);
+      });
+    });
+
+    group('storageBaseUrl', () {
+      test('uses QUICKPATCH_STORAGE_BASE_URL when set', () {
+        when(() => platform.environment).thenReturn({
+          'QUICKPATCH_STORAGE_BASE_URL': 'https://mirror.test',
+        });
+        expect(
+          runWithOverrides(() => cache.storageBaseUrl),
+          equals('https://mirror.test'),
+        );
+      });
+
+      test('derives from QUICKPATCH_HOSTED_URL when set', () {
+        when(() => platform.environment).thenReturn({
+          'QUICKPATCH_HOSTED_URL': 'https://hosted.test',
+        });
+        expect(
+          runWithOverrides(() => cache.storageBaseUrl),
+          equals('https://hosted.test/storage'),
+        );
+      });
+
+      test('falls back to quickpatch.yaml base_url when no env var', () {
+        when(() => platform.environment).thenReturn({});
+        when(
+          () => quickpatchEnv.configuredBaseUrl,
+        ).thenReturn('https://self-host.test');
+        expect(
+          runWithOverrides(() => cache.storageBaseUrl),
+          equals('https://self-host.test/storage'),
+        );
+      });
+
+      test('defaults to the hosted server when nothing is configured', () {
+        when(() => platform.environment).thenReturn({});
+        when(() => quickpatchEnv.configuredBaseUrl).thenReturn(null);
+        expect(
+          runWithOverrides(() => cache.storageBaseUrl),
+          equals(
+            'https://quickpatch-server-production.up.railway.app/storage',
+          ),
+        );
       });
     });
 
@@ -453,8 +498,9 @@ void main() {
             () => httpClient.send(captureAny()),
           ).captured.cast<http.BaseRequest>().map((r) => r.url).toList();
 
+          final storageBaseUrl = runWithOverrides(() => cache.storageBaseUrl);
           String perEngine(String name) =>
-              '${cache.storageBaseUrl}/${cache.storageBucket}/quickpatch/$quickpatchEngineRevision/$name';
+              '$storageBaseUrl/${cache.storageBucket}/quickpatch/$quickpatchEngineRevision/$name';
 
           final expected = [
             perEngine('patch-darwin-x64.zip'),
@@ -477,8 +523,9 @@ void main() {
             () => httpClient.send(captureAny()),
           ).captured.cast<http.BaseRequest>().map((r) => r.url).toList();
 
+          final storageBaseUrl = runWithOverrides(() => cache.storageBaseUrl);
           String perEngine(String name) =>
-              '${cache.storageBaseUrl}/${cache.storageBucket}/quickpatch/$quickpatchEngineRevision/$name';
+              '$storageBaseUrl/${cache.storageBucket}/quickpatch/$quickpatchEngineRevision/$name';
 
           final expected = [
             perEngine('patch-windows-x64.zip'),
@@ -501,8 +548,9 @@ void main() {
             () => httpClient.send(captureAny()),
           ).captured.cast<http.BaseRequest>().map((r) => r.url).toList();
 
+          final storageBaseUrl = runWithOverrides(() => cache.storageBaseUrl);
           String perEngine(String name) =>
-              '${cache.storageBaseUrl}/${cache.storageBucket}/quickpatch/$quickpatchEngineRevision/$name';
+              '$storageBaseUrl/${cache.storageBucket}/quickpatch/$quickpatchEngineRevision/$name';
 
           final expected = [
             perEngine('patch-linux-x64.zip'),
