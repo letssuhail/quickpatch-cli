@@ -407,9 +407,8 @@ app_id:
 
     // `quickpatch.yaml` is bundled directly as a flutter asset (added to
     // pubspec by PubspecEditor) and the native engine reads it from
-    // flutter_assets. No separate shorebird.yaml mirror is created — QuickPatch
-    // is independent. (Legacy projects that still bundle shorebird.yaml keep
-    // working via quickpatchEnv.syncEngineConfig + the engine's fallback.)
+    // flutter_assets. QuickPatch is independent — no separate config mirror is
+    // created.
 
     return QuickPatchYaml(appId: appId);
   }

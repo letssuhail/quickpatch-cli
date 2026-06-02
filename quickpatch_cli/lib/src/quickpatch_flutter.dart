@@ -34,10 +34,10 @@ class QuickPatchFlutter {
   /// The Flutter git URL the CLI clones to install build-time Flutter.
   ///
   /// Points at upstream public Flutter. The revisions QuickPatch uses are plain
-  /// upstream commits (verified: same commit + identical bin/internal/engine.version
-  /// as the corresponding Shorebird flutter_release/* branch HEAD), so cloning
-  /// from flutter/flutter yields the exact build-time Flutter we need without
-  /// depending on any private/third-party fork.
+  /// upstream commits (verified: same commit + identical
+  /// bin/internal/engine.version as the pinned QuickPatch Flutter release), so
+  /// cloning from flutter/flutter yields the exact build-time Flutter we need
+  /// without depending on any private/third-party fork.
   static const String flutterGitUrl =
       'https://github.com/flutter/flutter.git';
 

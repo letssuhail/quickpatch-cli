@@ -177,24 +177,6 @@ class QuickPatchEnv {
     return File(p.join(cwd.path, 'quickpatch.yaml'));
   }
 
-  /// Backward-compat sync for LEGACY projects only.
-  ///
-  /// The native engine reads its config from `flutter_assets/quickpatch.yaml`
-  /// (preferred) and falls back to `flutter_assets/shorebird.yaml`. New projects
-  /// bundle `quickpatch.yaml` directly, so there is nothing to mirror. Older
-  /// projects still list `shorebird.yaml` as the bundled asset; for those we
-  /// keep it in sync with `quickpatch.yaml` at build time so they keep working.
-  /// Returns silently when there is no legacy `shorebird.yaml` to maintain.
-  void syncEngineConfig() {
-    final root = getQuickPatchProjectRoot();
-    if (root == null) return;
-    final legacy = File(p.join(root.path, 'shorebird.yaml'));
-    if (!legacy.existsSync()) return; // new project: quickpatch.yaml is bundled
-    final source = getQuickPatchYamlFile(cwd: root);
-    if (!source.existsSync()) return;
-    legacy.writeAsStringSync(source.readAsStringSync());
-  }
-
   /// The `pubspec.yaml` file for this project.
   File getPubspecYamlFile({required Directory cwd}) {
     return File(p.join(cwd.path, 'pubspec.yaml'));
@@ -279,11 +261,9 @@ class QuickPatchEnv {
     if (pubspec.flutter == null) return false;
     if (pubspec.flutter!['assets'] == null) return false;
     final assets = pubspec.flutter!['assets'] as List;
-    // The native engine reads `quickpatch.yaml` from flutter_assets (preferred),
-    // falling back to the legacy `shorebird.yaml`. Accept either so existing
-    // projects keep validating; `quickpatch init` adds `quickpatch.yaml`.
-    return assets.contains('quickpatch.yaml') ||
-        assets.contains('shorebird.yaml');
+    // The native engine reads `quickpatch.yaml` from flutter_assets;
+    // `quickpatch init` adds it to the pubspec assets section.
+    return assets.contains('quickpatch.yaml');
   }
 
   /// Returns the Android package name from the pubspec.yaml file of a Flutter

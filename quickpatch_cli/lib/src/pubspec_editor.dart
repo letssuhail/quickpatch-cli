@@ -14,8 +14,7 @@ PubspecEditor get pubspecEditor => read(pubspecEditorRef);
 /// {@endtemplate}
 class PubspecEditor {
   /// Adds quickpatch.yaml to the assets section of the pubspec.yaml file.
-  /// Does nothing if the pubspec.yaml file already contains quickpatch.yaml
-  /// (or the legacy shorebird.yaml).
+  /// Does nothing if the pubspec.yaml file already contains quickpatch.yaml.
   /// Does nothing if a flutter project root cannot be found.
   void addQuickPatchYamlToPubspecAssets() {
     if (quickpatchEnv.pubspecContainsQuickPatchYaml) return;

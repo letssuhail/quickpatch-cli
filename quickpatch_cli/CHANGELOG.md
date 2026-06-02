@@ -1,3 +1,7 @@
+## 1.6.113
+
+- **Cleanup**: removed the legacy config-file fallback (projects use `quickpatch.yaml` exclusively) and tidied source comments. No functional change for existing projects.
+
 ## 1.6.112
 
 - **Fix onboarding crash**: `quickpatch --version` and `quickpatch doctor` no longer fail with a cache-corrupted error on a fresh install before the pinned Flutter/engine is downloaded. The engine revision now falls back to the install-root pin, and both commands degrade to a readable "not installed (downloaded on first release/patch)" instead of throwing.
@@ -19,7 +23,7 @@
 
 ## 1.6.107
 
-- **`flutter versions list`**: Now fetches supported versions directly from your QuickPatch server instead of reading all Shorebird fork branches. Only versions mirrored in R2 are shown — the ones you actually support. Falls back to local git branch listing if server is unreachable.
+- **`flutter versions list`**: Now fetches supported versions directly from your QuickPatch server instead of reading all engine fork branches. Only versions mirrored in R2 are shown — the ones you actually support. Falls back to local git branch listing if server is unreachable.
 
 ## 1.6.106
 
