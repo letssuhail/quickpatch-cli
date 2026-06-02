@@ -1,3 +1,7 @@
+## 1.6.114
+
+- **Fix `--version` reporting**: `version.dart` was not bumped in the previous two releases, so `quickpatch --version` (and the `x-cli-version` request header) reported a stale version. Now synced to the package version.
+
 ## 1.6.113
 
 - **Cleanup**: removed the legacy config-file fallback (projects use `quickpatch.yaml` exclusively) and tidied source comments. No functional change for existing projects.
