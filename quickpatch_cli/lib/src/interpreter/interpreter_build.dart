@@ -66,6 +66,7 @@ abstract final class InterpreterBuild {
     String? releaseVersion,
     String channel = 'stable',
     String? publicKeyBase64,
+    List<String> rotationPublicKeysBase64 = const [],
   }) {
     if (mode == 'ota') {
       assert(otaPatchUrl != null, 'ota mode requires otaPatchUrl');
@@ -90,6 +91,7 @@ abstract final class InterpreterBuild {
         appModuleAssetKey: appModuleAssetKey,
         otaDelaySeconds: otaDelay.inSeconds,
         publicKeyBase64: publicKeyBase64 ?? '',
+        rotationPublicKeysBase64: rotationPublicKeysBase64,
       );
     }
     assert(mode == 'argv' || mode == 'asset', 'mode must be argv|asset|ota');
@@ -228,8 +230,19 @@ abstract final class InterpreterBuild {
     required String appModuleAssetKey,
     required int otaDelaySeconds,
     required String publicKeyBase64,
+    List<String> rotationPublicKeysBase64 = const [],
   }) {
     final base = baseUrl.replaceAll(RegExp(r'/+$'), '');
+    // The ordered set of keys the bootstrapper trusts to verify a patch:
+    // primary key first, then any rotation keys. A patch is accepted if it
+    // verifies against any one of them (see `_qpVerify`). Empty => unsigned.
+    final trustedKeys = <String>[
+      if (publicKeyBase64.isNotEmpty) publicKeyBase64,
+      ...rotationPublicKeysBase64
+          .map((k) => k.trim())
+          .where((k) => k.isNotEmpty),
+    ];
+    final keysLiteral = trustedKeys.map((k) => "'$k'").join(', ');
     final b = StringBuffer()
       ..writeln('// AUTO-GENERATED QuickPatch server-OTA bootstrapper.')
       ..writeln("import 'dart:convert';")
@@ -249,7 +262,7 @@ abstract final class InterpreterBuild {
       ..writeln("const _appId = '$appId';")
       ..writeln("const _releaseVersion = '$releaseVersion';")
       ..writeln("const _channel = '$channel';")
-      ..writeln("const _publicKeyB64 = '$publicKeyBase64';")
+      ..writeln('const _publicKeysB64 = <String>[$keysLiteral];')
       ..writeln("const _appModuleAssetKey = '$appModuleAssetKey';")
       ..writeln('const _otaDelaySeconds = $otaDelaySeconds;')
       ..writeln()
@@ -262,7 +275,7 @@ abstract final class InterpreterBuild {
   /// The static portion of the server-OTA bootstrapper (everything after the
   /// generated `const _…` header). Emitted raw so the generated code's own
   /// `$…` interpolations are preserved verbatim; it depends only on the
-  /// `_base`/`_appId`/`_releaseVersion`/`_channel`/`_publicKeyB64`/
+  /// `_base`/`_appId`/`_releaseVersion`/`_channel`/`_publicKeysB64`/
   /// `_appModuleAssetKey`/`_otaDelaySeconds` consts the header defines.
   static const _serverBootstrapperBody = r'''
 // Staged OTA: a downloaded patch is NEVER applied to the running session. It is
@@ -451,25 +464,34 @@ Future<_QpCheck?> _qpCheckServer(int currentPatchNumber) async {
 }
 
 // Verify integrity (sha256) + authenticity (RSA-SHA256 over the hex hash)
-// against the embedded public key. Empty key => unsigned release (no key was
-// provided at release); signed patches require a valid signature.
+// against ANY of the embedded trusted public keys. An empty key list => unsigned
+// release (no key provided at release); signed patches require a valid signature.
+// Accepting any one of several keys is what enables signing-key rotation: a build
+// trusts the primary key plus rotation keys, so a patch signed by a rotated key
+// verifies alongside one signed by the prior key. A valid-but-wrong key is
+// skipped (its verify returns false / throws), not accepted.
 bool _qpVerify(Uint8List bytes, String? hashHex, String? sigB64) {
-  if (_publicKeyB64.isEmpty) return true; // unsigned release
+  final keys = _publicKeysB64.where((k) => k.isNotEmpty).toList();
+  if (keys.isEmpty) return true; // unsigned release
   if (hashHex == null || sigB64 == null) return false;
   if (crypto.sha256.convert(bytes).toString() != hashHex) return false;
-  try {
-    final seq = asn1.ASN1Parser(base64.decode(_publicKeyB64))
-        .nextObject() as asn1.ASN1Sequence;
-    final mod = (seq.elements[0] as asn1.ASN1Integer).valueAsBigInteger;
-    final exp = (seq.elements[1] as asn1.ASN1Integer).valueAsBigInteger;
-    final v = pc.Signer('SHA-256/RSA')
-      ..init(false,
-          pc.PublicKeyParameter<pc.RSAPublicKey>(pc.RSAPublicKey(mod, exp)));
-    return v.verifySignature(Uint8List.fromList(utf8.encode(hashHex)),
-        pc.RSASignature(base64.decode(sigB64)));
-  } on Object {
-    return false;
+  final msg = Uint8List.fromList(utf8.encode(hashHex));
+  final sig = pc.RSASignature(base64.decode(sigB64));
+  for (final key in keys) {
+    try {
+      final seq =
+          asn1.ASN1Parser(base64.decode(key)).nextObject() as asn1.ASN1Sequence;
+      final mod = (seq.elements[0] as asn1.ASN1Integer).valueAsBigInteger;
+      final exp = (seq.elements[1] as asn1.ASN1Integer).valueAsBigInteger;
+      final v = pc.Signer('SHA-256/RSA')
+        ..init(false,
+            pc.PublicKeyParameter<pc.RSAPublicKey>(pc.RSAPublicKey(mod, exp)));
+      if (v.verifySignature(msg, sig)) return true;
+    } on Object {
+      // Undecodable/mismatched key — try the next trusted key.
+    }
   }
+  return false;
 }
 ''';
 

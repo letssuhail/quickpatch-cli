@@ -97,6 +97,93 @@ void main() {
         isFalse,
       );
     });
+
+    // --- signing-key rotation (verifyAny / multi-key) ---
+
+    group('verifyAny (rotation)', () {
+      late String rotationPublicKeyBase64; // key B
+      late String rotationSignatureB64; // patch signed with B
+
+      setUpAll(() {
+        final rotPriv = '${tmp.path}/rotation_b.pem';
+        final rotPub = '${tmp.path}/rotation_b_pub.pem';
+        Process.runSync('openssl', [
+          'genpkey', '-algorithm', 'RSA', '-out', rotPriv,
+          '-pkeyopt', 'rsa_keygen_bits:2048',
+        ]);
+        Process.runSync('openssl', [
+          'rsa', '-in', rotPriv, '-pubout', '-out', rotPub,
+        ]);
+        rotationPublicKeyBase64 = signer.base64PublicKey(File(rotPub));
+        rotationSignatureB64 =
+            signer.sign(message: hashHex, privateKeyPemFile: File(rotPriv));
+      });
+
+      test('accepts a patch signed by a rotation key when the primary is first',
+          () {
+        // The core rotation case: primary key A is trusted but the patch was
+        // signed with rotated key B — must verify against B in the list.
+        expect(
+          PatchVerifier.verifyAny(
+            bytes: patch,
+            expectedHashHex: hashHex,
+            signatureB64: rotationSignatureB64,
+            publicKeysBase64: [publicKeyBase64, rotationPublicKeyBase64],
+          ),
+          isTrue,
+        );
+      });
+
+      test('still accepts a primary-key-signed patch with rotation keys present',
+          () {
+        expect(
+          PatchVerifier.verifyAny(
+            bytes: patch,
+            expectedHashHex: hashHex,
+            signatureB64: signatureB64,
+            publicKeysBase64: [publicKeyBase64, rotationPublicKeyBase64],
+          ),
+          isTrue,
+        );
+      });
+
+      test('skips an undecodable key and accepts a later valid one', () {
+        expect(
+          PatchVerifier.verifyAny(
+            bytes: patch,
+            expectedHashHex: hashHex,
+            signatureB64: rotationSignatureB64,
+            publicKeysBase64: ['not base64!!', rotationPublicKeyBase64],
+          ),
+          isTrue,
+        );
+      });
+
+      test('rejects when the signing key is in NO trusted slot', () {
+        // Signed by B, but only A is trusted → rejected (rotation is opt-in).
+        expect(
+          PatchVerifier.verifyAny(
+            bytes: patch,
+            expectedHashHex: hashHex,
+            signatureB64: rotationSignatureB64,
+            publicKeysBase64: [publicKeyBase64],
+          ),
+          isFalse,
+        );
+      });
+
+      test('rejects tampered bytes even with multiple trusted keys', () {
+        expect(
+          PatchVerifier.verifyAny(
+            bytes: Uint8List.fromList([...patch, 0]),
+            expectedHashHex: hashHex,
+            signatureB64: rotationSignatureB64,
+            publicKeysBase64: [publicKeyBase64, rotationPublicKeyBase64],
+          ),
+          isFalse,
+        );
+      });
+    });
   });
 }
 

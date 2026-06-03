@@ -215,6 +215,16 @@ If left checked, Xcode will rewrite the build number in the uploaded IPA, so the
           // verifies each patch's signature before applying it. Empty when no
           // --public-key was provided (unsigned mode).
           publicKeyBase64: base64PublicKey ?? '',
+          // Additional trusted keys (comma-separated) for signing-key rotation,
+          // so the bootstrapper also accepts a patch signed by a rotated key.
+          // Same env var the build pipeline forwards (see ArtifactBuilder).
+          rotationPublicKeysBase64: (Platform
+                      .environment['SHOREBIRD_PUBLIC_KEYS'] ??
+                  '')
+              .split(',')
+              .map((k) => k.trim())
+              .where((k) => k.isNotEmpty)
+              .toList(),
         ),
       );
       appModFile.writeAsStringSync(

@@ -96,6 +96,48 @@ void main() {
         expect(src, contains('applied at boot'));
         expect(src, isNot(contains('reassembleApplication()')));
       });
+
+      test('server mode bakes the primary key into the trusted-key list', () {
+        final src = InterpreterBuild.generateBootstrapperMain(
+          mode: 'server',
+          serverBaseUrl: 'https://qp.example',
+          appId: 'app-123',
+          releaseVersion: '1.0.0+1',
+          publicKeyBase64: 'PRIMARYKEY',
+        );
+        expect(src, contains("const _publicKeysB64 = <String>['PRIMARYKEY'];"));
+      });
+
+      test('server mode bakes rotation keys (primary first) for rotation', () {
+        final src = InterpreterBuild.generateBootstrapperMain(
+          mode: 'server',
+          serverBaseUrl: 'https://qp.example',
+          appId: 'app-123',
+          releaseVersion: '1.0.0+1',
+          publicKeyBase64: 'PRIMARYKEY',
+          rotationPublicKeysBase64: ['ROTKEY1', 'ROTKEY2'],
+        );
+        expect(
+          src,
+          contains(
+            "const _publicKeysB64 = <String>['PRIMARYKEY', 'ROTKEY1', 'ROTKEY2'];",
+          ),
+        );
+        // The verify helper iterates the list (any-match), not a single key.
+        expect(src, contains('for (final key in keys)'));
+        expect(src, isNot(contains('_publicKeyB64')));
+      });
+
+      test('server mode with no key emits an empty trusted-key list (unsigned)',
+          () {
+        final src = InterpreterBuild.generateBootstrapperMain(
+          mode: 'server',
+          serverBaseUrl: 'https://qp.example',
+          appId: 'app-123',
+          releaseVersion: '1.0.0+1',
+        );
+        expect(src, contains('const _publicKeysB64 = <String>[];'));
+      });
     });
 
     group('dart2bytecodeArgs (patch)', () {

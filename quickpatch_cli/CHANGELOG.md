@@ -1,3 +1,7 @@
+## 1.6.117
+
+- **Signing-key rotation (end to end)**: a build can now trust more than one patch-signing public key (a primary key plus rotation keys), so a patch signed by a newly-rotated key is accepted alongside one signed by the prior key — letting the signing key be rotated without invalidating installs. The additional keys, supplied as a comma-separated list, are embedded into `quickpatch.yaml` for the Android/data-patch path and baked into the iOS interpreter bootstrapper's trusted-key set; in both cases a patch verifies if its signature matches **any** trusted key (a valid-but-wrong key is skipped, never accepted). Device-verified on a physical Android device and a physical iPhone: a patch signed with a rotated key is downloaded, verified against the multi-key set, and applied.
+
 ## 1.6.116
 
 - **Patch signing fix (security)**: ensure the patch public key is embedded into the app before every Android and iOS build, so on-device patch **signature verification is actually enforced**. Previously the key could be omitted for QuickPatch projects, leaving the on-device updater unable to verify patches (effectively unsigned). Device-verified on a physical Android device: a patch signed with an **untrusted key is now rejected** at boot ("Patch signature is invalid"), while one signed with the trusted key applies normally. Applied automatically and idempotently, so existing installs are fixed on the next build.

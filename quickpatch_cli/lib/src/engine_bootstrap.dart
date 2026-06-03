@@ -162,19 +162,48 @@ Future<void> ensureQuickPatchIosEngine() async {
   }
 }
 
-/// Ensures the cloned Flutter SDK's `flutter_tools` embeds the patch public key
-/// into a QuickPatch project's `quickpatch.yaml` asset.
+/// Ensures the cloned Flutter SDK's `flutter_tools` embeds the patch public
+/// key(s) into a QuickPatch project's `quickpatch.yaml` asset. Applies two
+/// independent, idempotent fixes to the pinned upstream checkout (which we
+/// consume but don't own) at build time:
 ///
-/// The upstream Flutter fork's asset pipeline only injected the build-time
-/// public key into its own legacy config filename, not `quickpatch.yaml`. Since
-/// QuickPatch projects use `quickpatch.yaml`, the public key was never embedded
-/// and the on-device updater ran fail-open: UNSIGNED patches applied. We consume
-/// the Flutter SDK at a pinned upstream revision we don't own, so the fix is
-/// applied to the local checkout at build time — idempotently. When it patches,
-/// it deletes the compiled `flutter_tools` snapshot so the change is recompiled
-/// on the next `flutter` run (Flutter keys that snapshot on the SDK revision,
-/// which is unchanged, so it must be removed to force a rebuild).
+///  1. **Asset guard** — the upstream asset pipeline only injected the
+///     build-time public key into its own legacy config filename, not
+///     `quickpatch.yaml`. Since QuickPatch projects use `quickpatch.yaml`, the
+///     key was never embedded and the on-device updater ran fail-open: UNSIGNED
+///     patches applied. Repointed to `quickpatch.yaml`.
+///  2. **Rotation-key emit** — the upstream yaml compiler only emitted the
+///     single `patch_public_key`. Signing-key rotation needs the comma-separated
+///     `patch_public_keys` (from `SHOREBIRD_PUBLIC_KEYS`, forwarded by
+///     [ArtifactBuilder.buildEnvironment]) emitted too, so a build can trust a
+///     rotated key alongside the primary one. Without this, rotation keys are
+///     silently dropped at build time and rotated-key patches fail on device.
+///
+/// If either fix changes a file, the compiled `flutter_tools` snapshot/stamp is
+/// deleted so the change is recompiled on the next `flutter` run (Flutter keys
+/// that snapshot on the SDK revision, which is unchanged, so it must be removed
+/// to force a rebuild).
 void ensureQuickPatchFlutterToolsPatched() {
+  final changed = _patchAssetGuard() | _patchRotationKeyEmit();
+  if (!changed) return;
+  for (final name in const ['flutter_tools.snapshot', 'flutter_tools.stamp']) {
+    final f = File(
+      p.join(quickpatchEnv.flutterDirectory.path, 'bin', 'cache', name),
+    );
+    if (f.existsSync()) {
+      try {
+        f.deleteSync();
+      } on FileSystemException {
+        // best-effort; a stale snapshot only means the fix lands one run later
+      }
+    }
+  }
+}
+
+/// Repoints the flutter_tools asset-injection guard at `quickpatch.yaml` so the
+/// build-time public key is embedded in QuickPatch projects. Returns whether the
+/// file was changed (false if absent, already patched, or not safely matchable).
+bool _patchAssetGuard() {
   final assetsTarget = File(
     p.join(
       quickpatchEnv.flutterDirectory.path,
@@ -182,10 +211,10 @@ void ensureQuickPatchFlutterToolsPatched() {
       'assets.dart',
     ),
   );
-  if (!assetsTarget.existsSync()) return;
+  if (!assetsTarget.existsSync()) return false;
   final source = assetsTarget.readAsStringSync();
   if (source.contains("file.basename == 'quickpatch.yaml'")) {
-    return; // already patched — idempotent, no snapshot invalidation
+    return false; // already patched — idempotent
   }
   // Match the upstream fork's asset-injection guard generically — a
   // `file.basename == '<name>.yaml'` test — rather than hard-coding the
@@ -205,24 +234,92 @@ void ensureQuickPatchFlutterToolsPatched() {
       'embedded public key (unsigned). Please report this so the fix can be '
       'updated for this revision.',
     );
-    return;
+    return false;
   }
   assetsTarget.writeAsStringSync(
     source.replaceFirst(guard, "if (file.basename == 'quickpatch.yaml') {"),
   );
-  for (final name in const ['flutter_tools.snapshot', 'flutter_tools.stamp']) {
-    final f = File(
-      p.join(quickpatchEnv.flutterDirectory.path, 'bin', 'cache', name),
+  logger.detail('[engine] Applied QuickPatch patch-signing fix to flutter_tools.');
+  return true;
+}
+
+/// Injects emission of the comma-separated rotation public keys
+/// (`patch_public_keys`) into the flutter_tools yaml compiler, right after the
+/// existing single-key emit. Returns whether the file was changed (false if not
+/// found, already patched, or not safely matchable).
+bool _patchRotationKeyEmit() {
+  // Locate the compiler by content, not by path: the file that emits
+  // `compiled['patch_public_key']`. This avoids hard-coding the upstream
+  // directory name and survives it moving across Flutter revisions.
+  final target = _findYamlCompilerFile();
+  if (target == null) return false;
+  final source = target.readAsStringSync();
+  if (source.contains("compiled['patch_public_keys']")) {
+    return false; // already patched — idempotent
+  }
+  // Match the existing single-key emit block generically (any local variable
+  // name, any interior whitespace) and append the rotation-key emit after it.
+  final emitBlock = RegExp(
+    r"final String\?\s+(\w+)\s*=\s*environment\['SHOREBIRD_PUBLIC_KEY'\];\s*"
+    r"if \(\1 != null\) \{\s*"
+    r"compiled\['patch_public_key'\] = \1;\s*"
+    r'\}',
+  );
+  final matches = emitBlock.allMatches(source).length;
+  if (matches != 1) {
+    // Same signing-critical safety net as the asset guard: never guess. If we
+    // can't find exactly one emit site, leave it and warn — rotation keys are
+    // an enhancement, so the build still produces a (single-key) signed patch.
+    logger.warn(
+      '[engine] Could not enable signing-key rotation: expected exactly one '
+      "patch_public_key emit in flutter_tools but found $matches. Rotation keys "
+      '(SHOREBIRD_PUBLIC_KEYS) will be ignored for this Flutter revision; the '
+      'primary key still signs patches. Please report this so the fix can be '
+      'updated for this revision.',
     );
-    if (f.existsSync()) {
+    return false;
+  }
+  target.writeAsStringSync(
+    source.replaceFirstMapped(
+      emitBlock,
+      (m) =>
+          '${m.group(0)}\n'
+          '  // Trust additional comma-separated public keys for signing-key\n'
+          '  // rotation; a patch verifies if its signature matches the primary\n'
+          '  // key or any of these.\n'
+          "  final String? quickPatchRotationKeys = environment['SHOREBIRD_PUBLIC_KEYS'];\n"
+          '  if (quickPatchRotationKeys != null && quickPatchRotationKeys.isNotEmpty) {\n'
+          "    compiled['patch_public_keys'] = quickPatchRotationKeys;\n"
+          '  }',
+    ),
+  );
+  logger.detail('[engine] Enabled signing-key rotation in flutter_tools.');
+  return true;
+}
+
+/// Finds the flutter_tools Dart file that emits `compiled['patch_public_key']`
+/// (the yaml compiler), searching by content under `flutter_tools/lib/src`.
+/// Returns null if the tools tree or the emit site is absent.
+File? _findYamlCompilerFile() {
+  final toolsSrc = Directory(
+    p.join(
+      quickpatchEnv.flutterDirectory.path,
+      'packages', 'flutter_tools', 'lib', 'src',
+    ),
+  );
+  if (!toolsSrc.existsSync()) return null;
+  for (final entity in toolsSrc.listSync(recursive: true)) {
+    if (entity is File && entity.path.endsWith('.dart')) {
       try {
-        f.deleteSync();
+        if (entity.readAsStringSync().contains("compiled['patch_public_key']")) {
+          return entity;
+        }
       } on FileSystemException {
-        // best-effort; a stale snapshot only means the fix lands one run later
+        // unreadable file — skip
       }
     }
   }
-  logger.detail('[engine] Applied QuickPatch patch-signing fix to flutter_tools.');
+  return null;
 }
 
 Future<void> _run(

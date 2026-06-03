@@ -29,28 +29,51 @@ abstract final class PatchVerifier {
     required String expectedHashHex,
     required String signatureB64,
     required String publicKeyBase64,
+  }) =>
+      verifyAny(
+        bytes: bytes,
+        expectedHashHex: expectedHashHex,
+        signatureB64: signatureB64,
+        publicKeysBase64: [publicKeyBase64],
+      );
+
+  /// Like [verify] but accepts ANY one of several trusted keys. This is what
+  /// enables signing-key rotation: a release trusts the primary key plus any
+  /// rotation keys, so a patch signed by a rotated key verifies alongside one
+  /// signed by the prior key. A valid-but-wrong key is skipped, not accepted.
+  /// An empty (or all-blank) list means no key is configured → returns false
+  /// for a signed patch (callers treat an empty list as "unsigned release"
+  /// before calling, mirroring the on-device bootstrapper).
+  static bool verifyAny({
+    required Uint8List bytes,
+    required String expectedHashHex,
+    required String signatureB64,
+    required List<String> publicKeysBase64,
   }) {
     final hashHex = crypto.sha256.convert(bytes).toString();
     if (hashHex != expectedHashHex) return false;
-    try {
-      final seq =
-          asn1.ASN1Parser(base64.decode(publicKeyBase64)).nextObject()
-              as asn1.ASN1Sequence;
-      final modulus =
-          (seq.elements[0] as asn1.ASN1Integer).valueAsBigInteger;
-      final exponent =
-          (seq.elements[1] as asn1.ASN1Integer).valueAsBigInteger;
-      final verifier = Signer('SHA-256/RSA')
-        ..init(
-          false,
-          PublicKeyParameter<RSAPublicKey>(RSAPublicKey(modulus, exponent)),
-        );
-      return verifier.verifySignature(
-        Uint8List.fromList(utf8.encode(hashHex)),
-        RSASignature(base64.decode(signatureB64)),
-      );
-    } on Object {
-      return false;
+    final message = Uint8List.fromList(utf8.encode(hashHex));
+    final signature = RSASignature(base64.decode(signatureB64));
+    for (final publicKeyBase64 in publicKeysBase64) {
+      if (publicKeyBase64.isEmpty) continue;
+      try {
+        final seq =
+            asn1.ASN1Parser(base64.decode(publicKeyBase64)).nextObject()
+                as asn1.ASN1Sequence;
+        final modulus =
+            (seq.elements[0] as asn1.ASN1Integer).valueAsBigInteger;
+        final exponent =
+            (seq.elements[1] as asn1.ASN1Integer).valueAsBigInteger;
+        final verifier = Signer('SHA-256/RSA')
+          ..init(
+            false,
+            PublicKeyParameter<RSAPublicKey>(RSAPublicKey(modulus, exponent)),
+          );
+        if (verifier.verifySignature(message, signature)) return true;
+      } on Object {
+        // Undecodable/mismatched key — try the next trusted key.
+      }
     }
+    return false;
   }
 }
