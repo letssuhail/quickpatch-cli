@@ -1,3 +1,7 @@
+## 1.6.118
+
+- **Multi-version foundation**: the CLI now resolves the engine revision for a Flutter version from the server's `/api/v1/engine-versions` registry, falling back to the built-in map if the server is unreachable. This means a newly-built Flutter version becomes usable without shipping a new CLI - the engine-build pipeline just publishes the version to the registry. Behavior is unchanged for the currently-shipped version (it resolves identically), and offline/no-server builds keep working via the fallback.
+
 ## 1.6.117
 
 - **Signing-key rotation (end to end)**: a build can now trust more than one patch-signing public key (a primary key plus rotation keys), so a patch signed by a newly-rotated key is accepted alongside one signed by the prior key — letting the signing key be rotated without invalidating installs. The additional keys, supplied as a comma-separated list, are embedded into `quickpatch.yaml` for the Android/data-patch path and baked into the iOS interpreter bootstrapper's trusted-key set; in both cases a patch verifies if its signature matches **any** trusted key (a valid-but-wrong key is skipped, never accepted). Device-verified on a physical Android device and a physical iPhone: a patch signed with a rotated key is downloaded, verified against the multi-key set, and applied.

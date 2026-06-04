@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -5,10 +6,15 @@ import 'package:quickpatch_cli/src/logging/logging.dart';
 import 'package:quickpatch_cli/src/platform.dart';
 import 'package:quickpatch_cli/src/quickpatch_env.dart';
 
-/// The QuickPatch iOS engine (snapshot) revision pinned to each supported
-/// Flutter revision. The on-device VM only loads snapshots whose version hash
-/// matches the engine, so a release + its patches + the engine must all share
-/// this revision. Extend this map when a new Flutter version is supported.
+/// Built-in FALLBACK map of Flutter revision -> QuickPatch iOS engine (snapshot)
+/// revision, used only when the server registry can't be reached. The on-device
+/// VM only loads snapshots whose version hash matches the engine, so a release +
+/// its patches + the engine must all share this revision.
+///
+/// The live source is the server's `/api/v1/engine-versions` registry (see
+/// [_fetchEngineVersionMap]); a newly-built Flutter version is published there,
+/// so it becomes usable WITHOUT shipping a new CLI. This constant only needs to
+/// list versions that must work offline / if the server is down.
 const _engineRevisionForFlutterRevision = <String, String>{
   // Re-baselined 2026-05-30 from dd03f6ff... to the merge-loader engine, which
   // adds arbitrary-code-push (Dart interpreter / dynamic modules) ON TOP of the
@@ -28,11 +34,18 @@ const _defaultCdnBase = 'https://pub-110a0f73321f42dcb93e02c2503b992a.r2.dev';
 /// macOS-only, so this relies on `curl`/`tar`/`shasum`/`codesign` being present.
 Future<void> ensureQuickPatchIosEngine() async {
   final flutterRevision = quickpatchEnv.flutterRevision;
+  // Resolve the engine revision: explicit override, then the server registry
+  // (so new versions work without a CLI release), then the built-in fallback.
+  final remoteMap = await _fetchEngineVersionMap();
   final engineRevision =
       platform.environment['QUICKPATCH_ENGINE_REV'] ??
+      remoteMap[flutterRevision] ??
       _engineRevisionForFlutterRevision[flutterRevision];
   if (engineRevision == null) {
-    final supported = _engineRevisionForFlutterRevision.keys.join(', ');
+    final supported = <String>{
+      ...remoteMap.keys,
+      ..._engineRevisionForFlutterRevision.keys,
+    }.join(', ');
     logger.warn(
       '[engine] No QuickPatch iOS engine is published for Flutter revision '
       '$flutterRevision, so iOS code push (especially --interpreter) will not '
@@ -159,6 +172,44 @@ Future<void> ensureQuickPatchIosEngine() async {
     } on Exception {
       // best-effort cleanup
     }
+  }
+}
+
+/// Fetches the server's engine-version registry as a `flutterRevision ->
+/// engineRevision` map, so a Flutter version built + published after this CLI
+/// shipped is still usable (no CLI release needed per version). Best-effort:
+/// returns an empty map on any failure (no network, server down, bad JSON), and
+/// the caller falls back to [_engineRevisionForFlutterRevision]. Uses `curl`
+/// (already required for the engine download) with a short timeout so a slow or
+/// unreachable server never stalls a build.
+Future<Map<String, String>> _fetchEngineVersionMap() async {
+  try {
+    final base = quickpatchEnv.hostedUri;
+    if (base == null) return const {};
+    final url =
+        '${base.toString().replaceAll(RegExp(r'/+$'), '')}/api/v1/engine-versions';
+    final result = await Process.run('curl', [
+      '-fsSL', '--max-time', '10', url,
+    ]);
+    if (result.exitCode != 0) return const {};
+    final decoded = jsonDecode(result.stdout as String);
+    if (decoded is! Map<String, dynamic>) return const {};
+    final versions = decoded['versions'];
+    if (versions is! List) return const {};
+    final map = <String, String>{};
+    for (final v in versions) {
+      if (v is Map<String, dynamic>) {
+        final fr = v['flutterRevision'];
+        final er = v['engineRevision'];
+        if (fr is String && er is String && fr.isNotEmpty && er.isNotEmpty) {
+          map[fr] = er;
+        }
+      }
+    }
+    return map;
+  } on Object {
+    // Never let registry resolution break a build — fall back to the constant.
+    return const {};
   }
 }
 
