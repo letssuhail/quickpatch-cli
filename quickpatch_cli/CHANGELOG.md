@@ -1,3 +1,7 @@
+## 1.6.121
+
+- **`quickpatch init --channel`**: choose the update channel a build listens to (defaults to `stable`). Ship a beta build with `--channel=beta`, publish to it with `quickpatch patch --track=beta`, and your store build (on `stable`) stays untouched. The flag writes `channel:` into `quickpatch.yaml`; the on-device updater already honors it. Stable builds keep a clean config (no channel line written for the default).
+
 ## 1.6.120
 
 - **Branded CLI experience**: `quickpatch init` now opens with a welcome banner — an emerald ANSI "QUICKPATCH" wordmark, tagline, and a short wizard intro — and `quickpatch --help` shows the same logo header. Color and art are automatically stripped when output isn't a terminal (pipes, CI, files) and are never emitted in `--json` mode, so scripting output stays clean.

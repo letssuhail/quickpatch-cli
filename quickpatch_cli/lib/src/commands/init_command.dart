@@ -42,7 +42,15 @@ class InitCommand extends QuickPatchCommand {
             'Must be between 1 and '
             '${CommonArguments.appDisplayNameMaxLength} characters.',
       )
-      ..addOption('organization-id', help: 'The organization ID to use.');
+      ..addOption('organization-id', help: 'The organization ID to use.')
+      ..addOption(
+        'channel',
+        help:
+            'The update channel this build listens to. Devices only receive '
+            'patches promoted to their channel (e.g. ship a beta build with '
+            '--channel=beta, then publish with "quickpatch patch --track=beta").',
+        defaultsTo: 'stable',
+      );
   }
 
   @override
@@ -231,6 +239,7 @@ Please make sure you are running "quickpatch init" from within your Flutter proj
         projectRoot: projectRoot,
         appId: quickpatchYaml.appId,
         flavors: flavorsToAppIds,
+        channel: results['channel'] as String? ?? 'stable',
       );
       updateQuickPatchYamlProgress.complete('Flavors added to quickpatch.yaml');
       return ExitCode.success.code;
@@ -322,6 +331,7 @@ Please make sure you are running "quickpatch init" from within your Flutter proj
       projectRoot: projectRoot,
       appId: appId,
       flavors: flavors,
+      channel: results['channel'] as String? ?? 'stable',
     );
 
     if (!quickpatchEnv.pubspecContainsQuickPatchYaml) {
@@ -375,6 +385,7 @@ For more information about QuickPatch, visit ${link(uri: Uri.parse('https://quic
     required String appId,
     required Directory projectRoot,
     Map<String, String>? flavors,
+    String channel = 'stable',
   }) {
     const content =
         '''
@@ -387,6 +398,12 @@ For more information about QuickPatch, visit ${link(uri: Uri.parse('https://quic
 # It is not a secret and can be shared publicly.
 app_id:
 
+# channel controls which update track this build listens to (default: "stable").
+# Devices only receive patches promoted to their channel. To run a beta program,
+# ship a separate build with "channel: beta" and publish to it with
+# "quickpatch patch --track=beta"; your store build stays on "stable".
+# channel: beta
+
 # auto_update controls if QuickPatch should automatically update in the background on launch.
 # If auto_update: false, you will need to use package:quickpatch_code_push to trigger updates.
 # https://pub.dev/packages/quickpatch_code_push
@@ -395,6 +412,12 @@ app_id:
 ''';
 
     final editor = YamlEditor(content)..update(['app_id'], appId);
+
+    // Only write a `channel` key for non-default channels, so ordinary store
+    // builds keep a clean config (absent channel == "stable" in the updater).
+    if (channel.isNotEmpty && channel != 'stable') {
+      editor.update(['channel'], channel);
+    }
 
     // Bake the server URL into the config so the on-device updater queries the
     // right server. Derived from QUICKPATCH_HOSTED_URL (the same server the CLI
