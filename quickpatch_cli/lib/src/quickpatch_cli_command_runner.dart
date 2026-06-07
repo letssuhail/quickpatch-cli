@@ -5,6 +5,7 @@ import 'package:args/command_runner.dart';
 import 'package:cli_completion/cli_completion.dart';
 import 'package:mason_logger/mason_logger.dart';
 import 'package:scoped_deps/scoped_deps.dart';
+import 'package:quickpatch_cli/src/branding.dart';
 import 'package:quickpatch_cli/src/commands/commands.dart';
 import 'package:quickpatch_cli/src/engine_config.dart';
 import 'package:quickpatch_cli/src/interactive_mode.dart';
@@ -92,7 +93,7 @@ class QuickPatchCliCommandRunner extends CompletionCommandRunner<int> {
   }
 
   @override
-  void printUsage() => logger.info(usage);
+  void printUsage() => logger.info('${Branding.header()}\n$usage');
 
   @override
   Future<int> run(Iterable<String> args) async {

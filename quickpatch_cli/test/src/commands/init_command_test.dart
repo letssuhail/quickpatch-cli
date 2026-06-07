@@ -10,6 +10,7 @@ import 'package:scoped_deps/scoped_deps.dart';
 import 'package:quickpatch_cli/src/code_push_client_wrapper.dart';
 import 'package:quickpatch_cli/src/commands/init_command.dart';
 import 'package:quickpatch_cli/src/config/config.dart';
+import 'package:quickpatch_cli/src/json_output.dart';
 import 'package:quickpatch_cli/src/doctor.dart';
 import 'package:quickpatch_cli/src/executables/executables.dart';
 import 'package:quickpatch_cli/src/logging/logging.dart';
@@ -69,6 +70,7 @@ environment:
           pubspecEditorRef.overrideWith(() => pubspecEditor),
           quickpatchEnvRef.overrideWith(() => quickpatchEnv),
           quickpatchValidatorRef.overrideWith(() => quickpatchValidator),
+          isJsonModeRef.overrideWith(() => false),
         },
       );
     }

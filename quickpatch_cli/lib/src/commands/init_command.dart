@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:mason_logger/mason_logger.dart';
+import 'package:quickpatch_cli/src/branding.dart';
 import 'package:quickpatch_cli/src/code_push_client_wrapper.dart';
 import 'package:quickpatch_cli/src/common_arguments.dart';
 import 'package:quickpatch_cli/src/config/config.dart';
@@ -52,6 +53,11 @@ class InitCommand extends QuickPatchCommand {
 
   @override
   Future<int> run() async {
+    // Brand moment: greet the user with the wizard banner (text-only modes
+    // and JSON output stay clean — color/art is stripped off a TTY, and we
+    // never print it in JSON mode).
+    if (!isJsonMode) logger.info(Branding.welcome());
+
     try {
       await quickpatchValidator.validatePreconditions(
         checkUserIsAuthenticated: true,

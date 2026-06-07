@@ -1,3 +1,7 @@
+## 1.6.120
+
+- **Branded CLI experience**: `quickpatch init` now opens with a welcome banner — an emerald ANSI "QUICKPATCH" wordmark, tagline, and a short wizard intro — and `quickpatch --help` shows the same logo header. Color and art are automatically stripped when output isn't a terminal (pipes, CI, files) and are never emitted in `--json` mode, so scripting output stays clean.
+
 ## 1.6.119
 
 - **Default endpoints now use the production custom domains**: the default hosted server is `https://api.quickpatch.dev` (was the Railway origin URL) and the login/console hint points to `https://quickpatch.dev`. These are only defaults — `QUICKPATCH_HOSTED_URL` and the `base_url` in `quickpatch.yaml` still override them, so self-hosting and existing projects are unaffected.
