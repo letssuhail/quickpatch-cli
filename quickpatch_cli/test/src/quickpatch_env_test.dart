@@ -799,7 +799,7 @@ base_url: https://example.com''');
         expect(
           runWithOverrides(() => quickpatchEnv.hostedUri),
           equals(
-            Uri.parse('https://quickpatch-server-production.up.railway.app'),
+            Uri.parse('https://api.quickpatch.dev'),
           ),
         );
       });

@@ -333,7 +333,7 @@ Engine • revision ${engineRevision ?? notInstalled}''');
         return ExitCode.usage.code;
 
       } on ArgumentError {
-        const url = 'https://quickpatch-server-production.up.railway.app';
+        const url = 'https://api.quickpatch.dev';
         final isWindows = platform.isWindows;
         logger
           ..err('QUICKPATCH_HOSTED_URL is not set.')

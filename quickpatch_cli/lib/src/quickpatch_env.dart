@@ -315,7 +315,7 @@ class QuickPatchEnv {
       final baseUrl =
           platform.environment['QUICKPATCH_HOSTED_URL'] ??
           getQuickPatchYaml()?.baseUrl ??
-          'https://quickpatch-server-production.up.railway.app';
+          'https://api.quickpatch.dev';
       return Uri.tryParse(baseUrl);
     } on Exception {
       return null;

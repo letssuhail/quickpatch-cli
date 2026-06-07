@@ -232,7 +232,7 @@ void main() {
         expect(
           runWithOverrides(() => cache.storageBaseUrl),
           equals(
-            'https://quickpatch-server-production.up.railway.app/storage',
+            'https://api.quickpatch.dev/storage',
           ),
         );
       });

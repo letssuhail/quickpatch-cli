@@ -33,7 +33,7 @@ class LoginCommand extends QuickPatchCommand {
     logger.info('''
 To log in, generate an API key from the QuickPatch console:
 
-  ${styleBold.wrap(lightCyan.wrap('https://quickpatch.vercel.app'))}
+  ${styleBold.wrap(lightCyan.wrap('https://quickpatch.dev'))}
 
 Then paste it below.''');
 

@@ -52,7 +52,7 @@ dart pub global activate quickpatch_cli
 ## Quick start
 
 ```bash
-# 1. Log in (get an API key from https://quickpatch.vercel.app)
+# 1. Log in (get an API key from https://quickpatch.dev)
 quickpatch login
 
 # 2. Point the CLI at your server

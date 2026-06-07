@@ -1,3 +1,7 @@
+## 1.6.119
+
+- **Default endpoints now use the production custom domains**: the default hosted server is `https://api.quickpatch.dev` (was the Railway origin URL) and the login/console hint points to `https://quickpatch.dev`. These are only defaults — `QUICKPATCH_HOSTED_URL` and the `base_url` in `quickpatch.yaml` still override them, so self-hosting and existing projects are unaffected.
+
 ## 1.6.118
 
 - **Multi-version foundation**: the CLI now resolves the engine revision for a Flutter version from the server's `/api/v1/engine-versions` registry, falling back to the built-in map if the server is unreachable. This means a newly-built Flutter version becomes usable without shipping a new CLI - the engine-build pipeline just publishes the version to the registry. Behavior is unchanged for the currently-shipped version (it resolves identically), and offline/no-server builds keep working via the fallback.

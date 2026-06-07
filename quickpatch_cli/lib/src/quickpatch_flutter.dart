@@ -356,7 +356,7 @@ class QuickPatchFlutter {
     // Always hit production server — ignore project-level hostedUri so this
     // command works even outside a quickpatch project directory.
     const serverUrl =
-        'https://quickpatch-server-production.up.railway.app/api/v1/flutter-versions';
+        'https://api.quickpatch.dev/api/v1/flutter-versions';
     try {
       final response = await httpClient
           .get(

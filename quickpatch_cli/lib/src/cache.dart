@@ -132,7 +132,7 @@ class Cache {
     final hosted =
         platform.environment['QUICKPATCH_HOSTED_URL'] ??
         quickpatchEnv.configuredBaseUrl ??
-        'https://quickpatch-server-production.up.railway.app';
+        'https://api.quickpatch.dev';
     return '$hosted/storage';
   }
 
