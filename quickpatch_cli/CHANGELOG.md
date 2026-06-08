@@ -1,3 +1,9 @@
+## 1.6.124
+
+- **iOS `--interpreter` patches now support ANY code change, including new classes/screens** (device-proven: a patch that adds a whole new screen opens on a physical iPhone via OTA, no reinstall). The patch is now built as a **full app module** (the whole changed app behind a `dyn-module:entry-point` wrapper, like the release's base module) and the on-device bootstrapper **loads + runs it via `loadModuleFromBytes`** on the next launch (whole-program replacement) instead of the previous function-merge loader, which could only swap existing functions and crashed when a patch added a new top-level class.
+- **Self-heal against a bad staged patch**: a boot-failure counter (bumped before applying a staged patch, reset once the first frame renders) drops a staged patch that crashes repeatedly at load, falling back to the base — so a bad patch can no longer permanently brick the app.
+- **Note:** the bootstrapper is baked into the release, so rebuild your release with this version (`quickpatch release ios --interpreter`) before publishing full-module patches to it.
+
 ## 1.6.123
 
 - **iOS `--interpreter` release & patch now build end-to-end** (device-proven: an arbitrary Dart code change applied over-the-air on a physical iPhone with no reinstall). Completes the `dynamic_modules` resolution work from 1.6.122 by fixing three follow-on issues:

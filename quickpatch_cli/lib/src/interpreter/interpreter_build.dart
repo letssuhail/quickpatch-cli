@@ -316,27 +316,39 @@ int loadModuleAsPatch(Uint8List bytes, String prefix) =>
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1) BOOT-TIME APPLY: load the base, then swap a previously-staged,
-  //    re-verified patch onto it. The first frame is HELD (deferFirstFrame)
-  //    across both steps so the very first paint is already patched — no flash
-  //    of the old UI even if module loading yields to the event loop, and no
-  //    live reassemble.
+  // 1) BOOT-TIME LOAD (full-module replacement): a patch IS the
+  //    whole changed app compiled to bytecode. If one is staged + re-verified,
+  //    load and RUN it (its main() -> runApp) INSTEAD of the bundled base — so
+  //    ANY code change takes effect, including brand-new classes/screens (which
+  //    the old function-merge path could not add). The first frame is HELD
+  //    (deferFirstFrame) so the first paint is already the patched app.
+  //
+  //    Self-heal: a staged patch that hard-crashes at load would otherwise brick
+  //    every launch (the crash precedes the rollback check). A boot-failure
+  //    counter (bumped before load, reset after the first frame renders) drops a
+  //    staged patch that has crashed repeatedly, falling back to the base.
   var applied = 0;
   WidgetsBinding.instance.deferFirstFrame();
+  final pre = _qpReadStaged();
+  if (pre != null && _qpBumpBootFailures() > 2) {
+    _qpClearStaged();
+    _qpResetBootFailures();
+    debugPrint('QUICKPATCH: staged patch crashed repeatedly at boot; cleared');
+  }
   try {
-    final appBytes =
-        (await rootBundle.load(_appModuleAssetKey)).buffer.asUint8List();
-    await loadModuleFromBytes(appBytes); // base app main() -> runApp
     final staged = _qpReadStaged();
     if (staged != null) {
-      loadModuleAsPatch(staged.bytes, '');
+      await loadModuleFromBytes(staged.bytes); // patched app main() -> runApp
       applied = staged.number;
-      debugPrint('QUICKPATCH: staged patch #${staged.number} applied at boot');
+      debugPrint('QUICKPATCH: staged patch #${staged.number} loaded at boot');
     } else {
+      final appBytes =
+          (await rootBundle.load(_appModuleAssetKey)).buffer.asUint8List();
+      await loadModuleFromBytes(appBytes); // base app main() -> runApp
       debugPrint('QUICKPATCH: no staged patch; running base');
     }
   } on Object catch (e) {
-    debugPrint('QUICKPATCH: boot-apply skipped ($e)');
+    debugPrint('QUICKPATCH: boot-load skipped ($e)');
   } finally {
     WidgetsBinding.instance.allowFirstFrame();
   }
@@ -344,6 +356,9 @@ Future<void> main() async {
   // 2) BACKGROUND DOWNLOAD (after first frame): fetch a newer patch and STAGE
   //    it for the next launch. Never applied live.
   WidgetsBinding.instance.addPostFrameCallback((_) async {
+    // The patched app rendered its first frame — it's healthy, so clear the
+    // boot-failure counter.
+    _qpResetBootFailures();
     await Future<void>.delayed(const Duration(seconds: _otaDelaySeconds));
     try {
       debugPrint(
@@ -395,6 +410,34 @@ Directory _qpStageDir() {
       '$container/Library/Application Support/quickpatch/qp_stage');
 }
 
+// Boot-failure counter (self-heal). Bumped before applying a staged patch and
+// reset once the first frame renders; if a staged patch crashes at load it is
+// dropped after a few failed boots so it can never permanently brick the app.
+File _qpBootFailFile() => File('${_qpStageDir().path}/boot_fails');
+
+int _qpBumpBootFailures() {
+  try {
+    final f = _qpBootFailFile();
+    final n =
+        (f.existsSync() ? int.tryParse(f.readAsStringSync().trim()) ?? 0 : 0) +
+            1;
+    f.parent.createSync(recursive: true);
+    f.writeAsStringSync('$n', flush: true);
+    return n;
+  } on Object {
+    return 0;
+  }
+}
+
+void _qpResetBootFailures() {
+  try {
+    final f = _qpBootFailFile();
+    if (f.existsSync()) f.deleteSync();
+  } on Object {
+    // best-effort
+  }
+}
+
 // Read + re-verify the staged patch for THIS release. Returns null when there
 // is none, it targets a different release, or it fails re-verification.
 _QpStaged? _qpReadStaged() {
@@ -436,6 +479,9 @@ void _qpWriteStaged(_QpStaged p) {
   );
   File('${dir.path}/patch.qpmod.tmp').renameSync('${dir.path}/patch.qpmod');
   File('${dir.path}/patch.json.tmp').renameSync('${dir.path}/patch.json');
+  // A freshly-staged patch starts with a clean self-heal counter, so a prior
+  // patch's boot failures don't count against it.
+  _qpResetBootFailures();
 }
 
 void _qpClearStaged() {

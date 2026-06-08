@@ -19,13 +19,21 @@ class InterpreterPatchException implements Exception {
 
 /// {@template interpreter_patcher}
 /// Builds an iOS arbitrary-code-push (bytecode) patch by compiling the changed
-/// app Dart to an UNPREFIXED `dart2bytecode` module against the release's base
-/// bootstrapper kernel. The on-device same-URI merge-loader then swaps the
-/// changed functions onto the live app (proven host-side, proofs 2-9).
+/// app Dart to a `dart2bytecode` module against the release's base bootstrapper
+/// kernel.
+///
+/// The patch is a FULL app module (whole-program replacement):
+/// the caller compiles the entire changed app behind a `dyn-module:entry-point`
+/// wrapper, identical to the release's base `app.qpmod`. On the next launch the
+/// bootstrapper loads + RUNS the staged module via `loadModuleFromBytes`
+/// (instead of the bundled base), so ANY change takes effect — including
+/// brand-new top-level classes/screens. (The earlier same-URI function-merge
+/// loader could only swap existing functions and crashed when a patch added a
+/// new class.)
 ///
 /// This is the code-change counterpart to the existing data-only AOT-diff path
 /// in [`IosPatcher`]: instead of being blocked by the data-only gate, a code
-/// change ships as a tiny (~1-2 KB) bytecode patch loaded via the interpreter.
+/// change ships as a bytecode module loaded via the interpreter.
 ///
 /// The process runner is injected so the orchestration is unit-testable
 /// without the toolchain. Toolchain paths come from the interpreter-capable

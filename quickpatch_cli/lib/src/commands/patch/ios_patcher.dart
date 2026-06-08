@@ -546,7 +546,30 @@ edit (new/removed/reordered code or dependencies). Revert it and re-run.''';
       buildDir: buildDir,
       packageConfigPath: projectPackageConfig,
     );
-    final entry = p.join(Directory.current.path, target ?? p.join('lib', 'main.dart'));
+    // Build the patch as a FULL app module (whole-program replacement), NOT a
+    // function-merge diff: compile the entire changed app
+    // behind a dyn-module entry-point wrapper — identical to how the release
+    // builds its base app module — so the bootstrapper loads + RUNS it via
+    // loadModuleFromBytes on the next launch. This supports ANY change,
+    // including brand-new top-level classes/screens (the old merge path could
+    // not add new classes and crashed on apply).
+    final pubspecName = RegExp(r'^name:\s*(\S+)', multiLine: true)
+        .firstMatch(
+          File(p.join(Directory.current.path, 'pubspec.yaml')).readAsStringSync(),
+        )
+        ?.group(1);
+    if (pubspecName == null) {
+      progress.fail('Could not read app package name from pubspec.yaml');
+      throw ProcessExit(ExitCode.software.code);
+    }
+    final entry = p.join(buildDir, 'qp_app_module.dart');
+    File(entry)
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        "import 'package:$pubspecName/main.dart' as app;\n"
+        "@pragma('dyn-module:entry-point')\n"
+        'void main() => app.main();\n',
+      );
 
     // 1. Generate a bootstrapper + its no-link import-dill (supplies the
     //    framework so the patch module REFERENCES it, unprefixed).
