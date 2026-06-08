@@ -1,3 +1,10 @@
+## 1.6.123
+
+- **iOS `--interpreter` release & patch now build end-to-end** (device-proven: an arbitrary Dart code change applied over-the-air on a physical iPhone with no reinstall). Completes the `dynamic_modules` resolution work from 1.6.122 by fixing three follow-on issues:
+  - The generated `package_config.json` is written to the build dir, so its relative `rootUri`s are now rebased to absolute — previously the app's own `package:<app>/...` imports resolved against the wrong base.
+  - The interpreter release now declares `dynamic_modules` as a `path:` dependency so the `flutter build ipa` step (which compiles the bootstrapper via the project's own package_config) can resolve it.
+  - The interpreter patch now runs a `flutter pub get` with the vended Flutter before compiling, so `package:flutter` resolves to the engine-matched framework instead of a different system Flutter that fails to compile against the vended platform.
+
 ## 1.6.122
 
 - **Fix iOS `--interpreter` patch/release builds**: `quickpatch patch ios --interpreter` (and the interpreter release path) failed at `gen_kernel` with `Couldn't resolve the package 'dynamic_modules'`. The bootstrapper imports `package:dynamic_modules`, whose functions wrap `dart:_internal` dynamic-module natives that are already present in the engine's platform dill — but the wrapper package itself wasn't resolvable. The CLI now generates that wrapper and an augmented `package_config.json` automatically before compiling, so no engine change or extra setup is needed. Your project's `.dart_tool/package_config.json` is left untouched.

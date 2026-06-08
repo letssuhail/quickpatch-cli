@@ -523,6 +523,17 @@ edit (new/removed/reordered code or dependencies). Revert it and re-run.''';
       }
     }
 
+    // Re-resolve the package_config with the VENDED Flutter (process.run
+    // prepends it to PATH) so `package:flutter` points at the engine-matched
+    // framework — not a different system Flutter left in package_config by the
+    // earlier `flutter build ipa`, whose newer API would fail to compile
+    // against the vended platform dill.
+    final pubGet = await process.run('flutter', ['pub', 'get']);
+    if (pubGet.exitCode != 0) {
+      progress.fail('flutter pub get failed: ${pubGet.stderr}');
+      throw ProcessExit(ExitCode.software.code);
+    }
+
     final projectPackageConfig = p.join(
       Directory.current.path,
       '.dart_tool',

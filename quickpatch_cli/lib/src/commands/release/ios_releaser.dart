@@ -242,6 +242,12 @@ If left checked, Xcode will rewrite the build number in the uploaded IPA, so the
         'pointycastle': 'any',
         'asn1lib': 'any',
       });
+      // The bootstrapper imports `package:dynamic_modules`. Add it as a path
+      // dependency (generated wrapper over the dart:_internal natives already in
+      // the platform dill) so `flutter pub get` — and the implicit one inside
+      // `flutter build ipa`, which compiles the bootstrapper via the project's
+      // own package_config — can resolve it. Restored with the pubspec below.
+      addDynamicModulesPathDependency(pubspec: pubspec, buildDir: work.path);
       // Use CocoaPods (not Swift Package Manager) for interpreter builds: the
       // signature-verification deps (pointycastle/asn1lib/crypto) trigger an
       // SPM re-resolution that fails inside the Xcode build. CocoaPods is the
