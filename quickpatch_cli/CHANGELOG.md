@@ -1,3 +1,7 @@
+## 1.6.122
+
+- **Fix iOS `--interpreter` patch/release builds**: `quickpatch patch ios --interpreter` (and the interpreter release path) failed at `gen_kernel` with `Couldn't resolve the package 'dynamic_modules'`. The bootstrapper imports `package:dynamic_modules`, whose functions wrap `dart:_internal` dynamic-module natives that are already present in the engine's platform dill — but the wrapper package itself wasn't resolvable. The CLI now generates that wrapper and an augmented `package_config.json` automatically before compiling, so no engine change or extra setup is needed. Your project's `.dart_tool/package_config.json` is left untouched.
+
 ## 1.6.121
 
 - **`quickpatch init --channel`**: choose the update channel a build listens to (defaults to `stable`). Ship a beta build with `--channel=beta`, publish to it with `quickpatch patch --track=beta`, and your store build (on `stable`) stays untouched. The flag writes `channel:` into `quickpatch.yaml`; the on-device updater already honors it. Stable builds keep a clean config (no channel line written for the default).

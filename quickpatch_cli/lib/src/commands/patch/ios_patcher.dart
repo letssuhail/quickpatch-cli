@@ -15,6 +15,7 @@ import 'package:quickpatch_cli/src/common_arguments.dart';
 import 'package:quickpatch_cli/src/doctor.dart';
 import 'package:quickpatch_cli/src/engine_bootstrap.dart';
 import 'package:quickpatch_cli/src/executables/executables.dart';
+import 'package:quickpatch_cli/src/interpreter/dynamic_modules_package.dart';
 import 'package:quickpatch_cli/src/interpreter/interpreter_build.dart';
 import 'package:quickpatch_cli/src/interpreter/interpreter_patcher.dart';
 import 'package:quickpatch_cli/src/quickpatch_process.dart';
@@ -522,10 +523,17 @@ edit (new/removed/reordered code or dependencies). Revert it and re-run.''';
       }
     }
 
-    final packageConfig = p.join(
+    final projectPackageConfig = p.join(
       Directory.current.path,
       '.dart_tool',
       'package_config.json',
+    );
+    // The bootstrapper imports `package:dynamic_modules`; make it resolvable by
+    // generating the wrapper + an augmented package_config (engine natives are
+    // already in the platform dill, so no engine change is needed).
+    final packageConfig = prepareDynamicModulesPackageConfig(
+      buildDir: buildDir,
+      packageConfigPath: projectPackageConfig,
     );
     final entry = p.join(Directory.current.path, target ?? p.join('lib', 'main.dart'));
 

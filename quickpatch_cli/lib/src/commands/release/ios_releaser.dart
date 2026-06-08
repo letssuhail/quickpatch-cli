@@ -11,6 +11,7 @@ import 'package:quickpatch_cli/src/common_arguments.dart';
 import 'package:quickpatch_cli/src/doctor.dart';
 import 'package:quickpatch_cli/src/engine_bootstrap.dart';
 import 'package:quickpatch_cli/src/extensions/arg_results.dart';
+import 'package:quickpatch_cli/src/interpreter/dynamic_modules_package.dart';
 import 'package:quickpatch_cli/src/interpreter/interpreter_build.dart';
 import 'package:quickpatch_cli/src/quickpatch_artifacts.dart';
 import 'package:quickpatch_cli/src/quickpatch_process.dart';
@@ -260,6 +261,15 @@ If left checked, Xcode will rewrite the build number in the uploaded IPA, so the
         throw ProcessExit(ExitCode.software.code);
       }
 
+      // The bootstrapper imports `package:dynamic_modules`; make it resolvable
+      // to the gen steps via a generated wrapper + augmented package_config
+      // (the natives it wraps are already in the platform dill, so no engine
+      // change is needed). Built AFTER `pub get` so it isn't clobbered.
+      final genPkgConfig = prepareDynamicModulesPackageConfig(
+        buildDir: work.path,
+        packageConfigPath: pkgConfig,
+      );
+
       // 1. Bootstrapper import-dill (no-link) + framework interface.
       final importDill = p.join(work.path, 'boot_import.dill');
       await run(
@@ -267,7 +277,7 @@ If left checked, Xcode will rewrite the build number in the uploaded IPA, so the
         InterpreterBuild.genKernelArgs(
           genKernelSnapshot: genk,
           platformDill: plat,
-          packageConfig: pkgConfig,
+          packageConfig: genPkgConfig,
           entry: bootFile.path,
           output: importDill,
           noLinkPlatform: true,
@@ -289,7 +299,7 @@ If left checked, Xcode will rewrite the build number in the uploaded IPA, so the
         InterpreterBuild.dart2bytecodeArgs(
           dart2bytecodeSnapshot: d2b,
           platformDill: plat,
-          packageConfig: pkgConfig,
+          packageConfig: genPkgConfig,
           importDill: importDill,
           entry: appModFile.path,
           output: qpmod.path,
@@ -342,7 +352,7 @@ If left checked, Xcode will rewrite the build number in the uploaded IPA, so the
         InterpreterBuild.genKernelArgs(
           genKernelSnapshot: genk,
           platformDill: plat,
-          packageConfig: pkgConfig,
+          packageConfig: genPkgConfig,
           entry: bootFile.path,
           output: bootAot,
           dynamicInterfacePath: iface,
