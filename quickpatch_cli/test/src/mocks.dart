@@ -13,6 +13,7 @@ import 'package:quickpatch_cli/src/android_sdk.dart';
 import 'package:quickpatch_cli/src/android_studio.dart';
 import 'package:quickpatch_cli/src/archive_analysis/archive_analysis.dart';
 import 'package:quickpatch_cli/src/archive_analysis/archive_differ.dart';
+import 'package:quickpatch_cli/src/commands/patch/smoke_tester.dart';
 import 'package:quickpatch_cli/src/artifact_builder/artifact_builder.dart';
 import 'package:quickpatch_cli/src/artifact_manager.dart';
 import 'package:quickpatch_cli/src/auth/auth.dart';
@@ -188,6 +189,8 @@ class MockQuickPatchValidator extends Mock implements QuickPatchValidator {}
 class MockQuickPatchVersion extends Mock implements QuickPatchVersion {}
 
 class MockQuickPatchYaml extends Mock implements QuickPatchYaml {}
+
+class MockSmokeTester extends Mock implements SmokeTester {}
 
 class MockStdin extends Mock implements Stdin {}
 

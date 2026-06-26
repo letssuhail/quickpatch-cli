@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:scoped_deps/scoped_deps.dart';
@@ -61,6 +62,10 @@ class Adb {
   }
 
   /// Runs `adb logcat`.
+  ///
+  /// When [filter] is provided it is passed as `-s <filter>` (tag filter).
+  /// Omit it to stream all logs (needed to observe system tags such as
+  /// `ActivityManager`).
   Future<Process> logcat({String? filter, String? deviceId}) async {
     final args = [
       if (deviceId != null) ...['-s', deviceId],
@@ -70,5 +75,45 @@ class Adb {
       if (filter != null) ...['-s', filter],
     ];
     return _stream(args.join(' '));
+  }
+
+  /// Returns the ids of currently-connected devices/emulators (those in the
+  /// `device` state). Empty when none are connected.
+  Future<List<String>> connectedDevices() async {
+    final result = await _exec('devices');
+    if (result.exitCode != 0) return [];
+    return const LineSplitter()
+        .convert('${result.stdout}')
+        .skip(1) // Skip the "List of devices attached" header.
+        .map((line) => line.trim())
+        .where((line) => line.endsWith('\tdevice'))
+        .map((line) => line.split('\t').first.trim())
+        .where((id) => id.isNotEmpty)
+        .toList();
+  }
+
+  /// Installs (or reinstalls, with `-r`) the given [apk] on a device.
+  Future<void> installApk(File apk, {String? deviceId}) async {
+    final args = [
+      if (deviceId != null) ...['-s', deviceId],
+      'install',
+      '-r',
+      apk.path,
+    ];
+    final result = await _exec(args.join(' '));
+    if (result.exitCode != 0) {
+      throw Exception('Unable to install apk: ${result.stderr}');
+    }
+  }
+
+  /// Uninstalls the app with the given [package] name. Never throws (best
+  /// effort cleanup).
+  Future<void> uninstall({required String package, String? deviceId}) async {
+    final args = [
+      if (deviceId != null) ...['-s', deviceId],
+      'uninstall',
+      package,
+    ];
+    await _exec(args.join(' '));
   }
 }

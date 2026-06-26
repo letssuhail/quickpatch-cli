@@ -10,7 +10,10 @@ import 'package:quickpatch_cli/src/artifact_builder/artifact_builder.dart';
 import 'package:quickpatch_cli/src/artifact_manager.dart';
 import 'package:quickpatch_cli/src/code_push_client_wrapper.dart';
 import 'package:quickpatch_cli/src/commands/patch/patcher.dart';
+import 'package:quickpatch_cli/src/commands/patch/smoke_tester.dart';
+import 'package:quickpatch_cli/src/deployment_track.dart';
 import 'package:quickpatch_cli/src/doctor.dart';
+import 'package:quickpatch_cli/src/executables/adb.dart';
 import 'package:quickpatch_cli/src/engine_bootstrap.dart';
 import 'package:quickpatch_cli/src/extensions/arg_results.dart';
 import 'package:quickpatch_cli/src/logging/logging.dart';
@@ -130,6 +133,87 @@ Looked in:
       throw ProcessExit(ExitCode.software.code);
     }
     return aabFile;
+  }
+
+  @override
+  Future<void> runSmokeTestIfEnabled({String? releaseVersion}) async {
+    final enabled = argResults['smoke-test'] != false;
+    final track = argResults['track'] as String?;
+    if (!enabled) {
+      if (track == DeploymentTrack.stable.channel) {
+        logger.warn(
+          'Smoke test skipped (--no-smoke-test): the patch was NOT verified '
+          'to boot before publishing to "stable".',
+        );
+      }
+      return;
+    }
+
+    final deviceIds = await adb.connectedDevices();
+    if (deviceIds.isEmpty) {
+      logger.warn(
+        'No Android device or emulator is connected — skipping the patch '
+        'smoke test. Connect a device to verify the patch boots before '
+        'publishing.',
+      );
+      return;
+    }
+
+    final timeoutSeconds =
+        int.tryParse('${argResults['smoke-test-timeout']}') ?? 45;
+    final progress = logger.progress('Smoke testing the patched app');
+
+    final File apk;
+    try {
+      apk = await artifactBuilder.buildApk(
+        flavor: flavor,
+        target: target,
+        args: [
+          ...argResults.forwardedArgs,
+          ...extraBuildArgs,
+          ...buildNameAndNumberArgsFromReleaseVersion(releaseVersion),
+        ],
+        base64PublicKey: argResults.encodedPublicKey,
+      );
+    } on Exception catch (error) {
+      progress.fail('Smoke test could not build the patched APK.');
+      logger.err('$error');
+      throw ProcessExit(ExitCode.software.code);
+    }
+
+    final packageName = await smokeTester.packageNameFromApk(apk);
+    if (packageName == null) {
+      progress.complete();
+      logger.warn(
+        'Could not determine the app package name (aapt not found) — '
+        'skipping the smoke test.',
+      );
+      return;
+    }
+
+    final result = await smokeTester.run(
+      apk: apk,
+      packageName: packageName,
+      timeout: Duration(seconds: timeoutSeconds),
+      deviceId: deviceIds.length == 1 ? deviceIds.first : null,
+    );
+
+    if (result.passed) {
+      progress.complete('Smoke test passed — the patched app boots.');
+      return;
+    }
+
+    progress.fail('Smoke test FAILED — patch not published.');
+    logger.err(
+      '${result.reason}\n\n'
+      'The patch was NOT published because the patched app failed to boot. '
+      'Fix the startup crash and try again, or re-run with --no-smoke-test to '
+      'bypass this check (not recommended for the "stable" track).',
+    );
+    if (result.details != null) {
+      logger.detail(result.details!);
+    }
+    throw ProcessExit(ExitCode.software.code);
   }
 
   @override

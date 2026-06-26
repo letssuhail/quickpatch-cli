@@ -13,6 +13,8 @@ import 'package:quickpatch_cli/src/artifact_manager.dart';
 import 'package:quickpatch_cli/src/code_push_client_wrapper.dart';
 import 'package:quickpatch_cli/src/code_signer.dart';
 import 'package:quickpatch_cli/src/commands/patch/patch.dart';
+import 'package:quickpatch_cli/src/commands/patch/smoke_tester.dart';
+import 'package:quickpatch_cli/src/executables/adb.dart';
 import 'package:quickpatch_cli/src/common_arguments.dart';
 import 'package:quickpatch_cli/src/config/config.dart';
 import 'package:quickpatch_cli/src/doctor.dart';
@@ -57,6 +59,8 @@ void main() {
     late QuickPatchAndroidArtifacts quickpatchAndroidArtifacts;
 
     late AndroidPatcher patcher;
+    late Adb adb;
+    late SmokeTester smokeTester;
 
     File patchArtifactForArch(Arch arch, {String? flavor}) {
       return File(
@@ -87,6 +91,8 @@ void main() {
       return runScoped(
         body,
         values: {
+          adbRef.overrideWith(() => adb),
+          smokeTesterRef.overrideWith(() => smokeTester),
           artifactBuilderRef.overrideWith(() => artifactBuilder),
           artifactManagerRef.overrideWith(() => artifactManager),
           codePushClientWrapperRef.overrideWith(() => codePushClientWrapper),
@@ -109,6 +115,7 @@ void main() {
     setUpAll(() {
       registerFallbackValue(const AndroidArchiveDiffer());
       registerFallbackValue(Directory(''));
+      registerFallbackValue(Duration.zero);
       registerFallbackValue(FakeReleaseArtifact());
       registerFallbackValue(File(''));
       registerFallbackValue(ReleasePlatform.android);
@@ -118,6 +125,8 @@ void main() {
     setUp(() {
       argParser = MockArgParser();
       argResults = MockArgResults();
+      adb = MockAdb();
+      smokeTester = MockSmokeTester();
       artifactBuilder = MockArtifactBuilder();
       artifactManager = MockArtifactManager();
       codePushClientWrapper = MockCodePushClientWrapper();
@@ -155,6 +164,99 @@ void main() {
         flavor: null,
         target: null,
       );
+    });
+
+    group('runSmokeTestIfEnabled', () {
+      void stubBuildApk() {
+        when(
+          () => artifactBuilder.buildApk(
+            flavor: any(named: 'flavor'),
+            target: any(named: 'target'),
+            args: any(named: 'args'),
+            base64PublicKey: any(named: 'base64PublicKey'),
+          ),
+        ).thenAnswer((_) async => File('app-release.apk'));
+        when(
+          () => smokeTester.packageNameFromApk(any()),
+        ).thenAnswer((_) async => 'com.example.app');
+      }
+
+      setUp(() {
+        when(() => argResults['smoke-test']).thenReturn(true);
+        when(() => argResults['track']).thenReturn('stable');
+        when(() => argResults['smoke-test-timeout']).thenReturn('45');
+        when(() => adb.connectedDevices()).thenAnswer((_) async => ['device-1']);
+      });
+
+      test('skips (and warns for stable) when disabled', () async {
+        when(() => argResults['smoke-test']).thenReturn(false);
+        await runWithOverrides(
+          () => patcher.runSmokeTestIfEnabled(releaseVersion: '1.0.0+1'),
+        );
+        verifyNever(() => adb.connectedDevices());
+        verify(
+          () => logger.warn(any(that: contains('--no-smoke-test'))),
+        ).called(1);
+      });
+
+      test('skips when no device is connected', () async {
+        when(() => adb.connectedDevices()).thenAnswer((_) async => []);
+        await runWithOverrides(
+          () => patcher.runSmokeTestIfEnabled(releaseVersion: '1.0.0+1'),
+        );
+        verifyNever(
+          () => artifactBuilder.buildApk(
+            flavor: any(named: 'flavor'),
+            target: any(named: 'target'),
+            args: any(named: 'args'),
+            base64PublicKey: any(named: 'base64PublicKey'),
+          ),
+        );
+      });
+
+      test('completes without throwing when the smoke test passes', () async {
+        stubBuildApk();
+        when(
+          () => smokeTester.run(
+            apk: any(named: 'apk'),
+            packageName: any(named: 'packageName'),
+            timeout: any(named: 'timeout'),
+            deviceId: any(named: 'deviceId'),
+          ),
+        ).thenAnswer(
+          (_) async => const SmokeTestResult(passed: true, reason: 'ok'),
+        );
+        await expectLater(
+          runWithOverrides(
+            () => patcher.runSmokeTestIfEnabled(releaseVersion: '1.0.0+1'),
+          ),
+          completes,
+        );
+      });
+
+      test('throws (blocks publish) when the smoke test fails', () async {
+        stubBuildApk();
+        when(
+          () => smokeTester.run(
+            apk: any(named: 'apk'),
+            packageName: any(named: 'packageName'),
+            timeout: any(named: 'timeout'),
+            deviceId: any(named: 'deviceId'),
+          ),
+        ).thenAnswer(
+          (_) async => const SmokeTestResult(
+            passed: false,
+            reason: 'crashed',
+            details: 'log',
+          ),
+        );
+        await expectLater(
+          runWithOverrides(
+            () => patcher.runSmokeTestIfEnabled(releaseVersion: '1.0.0+1'),
+          ),
+          exitsWithCode(ExitCode.software),
+        );
+      });
     });
 
     group('primaryReleaseArtifactArch', () {

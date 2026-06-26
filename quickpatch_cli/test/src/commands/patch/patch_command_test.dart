@@ -295,6 +295,11 @@ void main() {
       when(() => patcher.assertArgsAreValid()).thenAnswer((_) async {});
       when(() => patcher.assertPreconditions()).thenAnswer((_) async {});
       when(
+        () => patcher.runSmokeTestIfEnabled(
+          releaseVersion: any(named: 'releaseVersion'),
+        ),
+      ).thenAnswer((_) async {});
+      when(
         () => patcher.extractReleaseVersionFromArtifact(any()),
       ).thenAnswer((_) async => releaseVersion);
       when(

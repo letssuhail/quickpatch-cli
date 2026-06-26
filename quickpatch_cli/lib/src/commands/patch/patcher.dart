@@ -116,6 +116,13 @@ More info: ${troubleshootingUrl.toLink()}.
   /// artifact for the platform (e.g. the AAB for Android, the IPA for iOS).
   Future<File> buildPatchArtifact({String? releaseVersion});
 
+  /// Optionally runs a publish-time smoke test of the patched app on a
+  /// connected device, aborting the command (throwing) if the app crashes or
+  /// hangs on startup. The default is a no-op; platforms that support it (e.g.
+  /// Android) override this. Called after the patch is built but before it is
+  /// uploaded.
+  Future<void> runSmokeTestIfEnabled({String? releaseVersion}) async {}
+
   /// Determines the release version from the provided app artifact.
   Future<String> extractReleaseVersionFromArtifact(File artifact);
 

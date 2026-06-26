@@ -143,6 +143,22 @@ the release to have been built with the interpreter (bytecode) base.''',
         negatable: false,
         help: 'Validate but do not upload the patch.',
       )
+      ..addFlag(
+        'smoke-test',
+        defaultsTo: true,
+        help: '''
+Android only. Before publishing, install and launch the patched app on a
+connected device/emulator and verify it reaches its first frame without
+crashing. If it crashes (or hangs) on startup, the patch is NOT published.
+Skipped automatically when no device is connected. Use --no-smoke-test to
+disable.''',
+      )
+      ..addOption(
+        'smoke-test-timeout',
+        help: 'Seconds to wait for the patched app to render its first frame '
+            'during the smoke test.',
+        defaultsTo: '45',
+      )
       ..addOption(
         CommonArguments.privateKeyArg.name,
         help: CommonArguments.privateKeyArg.description,
@@ -556,6 +572,11 @@ Building patch with Flutter $flutterVersionString
             ..info('The server may enforce additional checks.');
           throw ProcessExit(ExitCode.success.code);
         }
+
+        // Publish-time safety gate: confirm the patched app actually boots
+        // before it is uploaded. Aborts (no upload) if it crashes on startup.
+        // No-op for platforms/configs that don't support it.
+        await patcher.runSmokeTestIfEnabled(releaseVersion: release.version);
 
         await logPatchSummary(
           app: app,

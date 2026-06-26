@@ -7,6 +7,7 @@ import 'package:mason_logger/mason_logger.dart';
 import 'package:scoped_deps/scoped_deps.dart';
 import 'package:quickpatch_cli/src/branding.dart';
 import 'package:quickpatch_cli/src/commands/commands.dart';
+import 'package:quickpatch_cli/src/commands/patch/smoke_tester.dart';
 import 'package:quickpatch_cli/src/engine_config.dart';
 import 'package:quickpatch_cli/src/interactive_mode.dart';
 import 'package:quickpatch_cli/src/json_output.dart';
@@ -161,6 +162,9 @@ class QuickPatchCliCommandRunner extends CompletionCommandRunner<int> {
           isJsonModeRef.overrideWith(() => jsonMode),
           processRef.overrideWith(() => process),
           quickpatchArtifactsRef.overrideWith(() => quickpatchArtifacts),
+          // Registered at the root so the patch command's smoke-test gate can
+          // resolve it from its nested scope.
+          smokeTesterRef.overrideWith(SmokeTester.new),
         },
       );
       final exitCode = jsonMode

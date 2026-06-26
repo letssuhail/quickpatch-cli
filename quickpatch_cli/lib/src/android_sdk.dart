@@ -120,6 +120,32 @@ class AndroidSdk {
     platform.isWindows ? 'adb.exe' : 'adb',
   );
 
+  /// The path to an `aapt` executable, used to read an APK's package name.
+  ///
+  /// Prefers `aapt` on the PATH; otherwise picks the newest
+  /// `build-tools/<version>/aapt` under the SDK. Returns null if none is found.
+  late final String? aaptPath = _resolveAaptPath();
+
+  String? _resolveAaptPath() {
+    final onPath = osInterface.which(platform.isWindows ? 'aapt.exe' : 'aapt');
+    if (onPath != null) return onPath;
+
+    final sdkPath = path;
+    if (sdkPath == null) return null;
+    final buildTools = Directory(p.join(sdkPath, 'build-tools'));
+    if (!buildTools.existsSync()) return null;
+    final aaptName = platform.isWindows ? 'aapt.exe' : 'aapt';
+    final candidates =
+        buildTools
+            .listSync()
+            .whereType<Directory>()
+            .map((d) => p.join(d.path, aaptName))
+            .where((path) => File(path).existsSync())
+            .toList()
+          ..sort();
+    return candidates.isEmpty ? null : candidates.last;
+  }
+
   /// Returns a path to the given binary in the Android SDK platform tools.
   String? getPlatformToolsPath(String binary) {
     final androidSdkPath = path;

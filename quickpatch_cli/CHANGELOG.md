@@ -1,3 +1,7 @@
+## 1.6.125
+
+- **Publish-time smoke-test gate (Android)**: before an Android patch is uploaded, `quickpatch patch` now builds the patched app as an APK, installs and launches it on a connected device/emulator, and verifies it reaches its first frame. If the patched app **crashes or hangs on startup**, the patch is **not published** (the command exits non-zero) — so a startup-crashing patch never reaches your users. Detection uses the OS first-frame signal (`ActivityManager: Displayed`) for success, and logcat crash markers / a render timeout for failure. Runs automatically when a device is connected; skipped (with a warning for the `stable` track) when none is. Control it with `--no-smoke-test` and `--smoke-test-timeout=<seconds>` (default 45). Device-proven: a startup-crash patch is blocked; a healthy patch passes and publishes.
+
 ## 1.6.124
 
 - **iOS `--interpreter` patches now support ANY code change, including new classes/screens** (device-proven: a patch that adds a whole new screen opens on a physical iPhone via OTA, no reinstall). The patch is now built as a **full app module** (the whole changed app behind a `dyn-module:entry-point` wrapper, like the release's base module) and the on-device bootstrapper **loads + runs it via `loadModuleFromBytes`** on the next launch (whole-program replacement) instead of the previous function-merge loader, which could only swap existing functions and crashed when a patch added a new top-level class.
