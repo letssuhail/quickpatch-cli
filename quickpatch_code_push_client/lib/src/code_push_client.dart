@@ -160,15 +160,21 @@ class CodePushClient {
       json.decode(body) as Map<String, dynamic>,
     );
 
-    final uploadRequest = http.MultipartRequest('POST', Uri.parse(decoded.url))
-      ..files.add(file);
+    // Direct PUT to the presigned R2 URL (bypasses the API server, which cannot
+    // proxy large artifacts through a memory/edge-limited host). The artifact's
+    // hash/size were recorded by the create request above; this uploads bytes
+    // straight to object storage. Use a plain http.put (no auth interceptors) so
+    // no Authorization header conflicts with the presigned signature.
+    final uploadResponse = await http.put(
+      Uri.parse(decoded.url),
+      headers: const {'content-type': 'application/octet-stream'},
+      body: await File(artifactPath).readAsBytes(),
+    );
 
-    final uploadResponse = await _httpClient.send(uploadRequest);
-
-    if (!uploadResponse.isSuccess) {
+    if (uploadResponse.statusCode != 200 && uploadResponse.statusCode != 201) {
       throw CodePushException(
         message:
-            '''Failed to upload artifact (${uploadResponse.reasonPhrase} '${uploadResponse.statusCode})''',
+            '''Failed to upload artifact (${uploadResponse.reasonPhrase} ${uploadResponse.statusCode})''',
       );
     }
   }
@@ -219,15 +225,21 @@ class CodePushClient {
       json.decode(body) as Map<String, dynamic>,
     );
 
-    final uploadRequest = http.MultipartRequest('POST', Uri.parse(decoded.url))
-      ..files.add(file);
+    // Direct PUT to the presigned R2 URL (bypasses the API server, which cannot
+    // proxy large artifacts through a memory/edge-limited host). The artifact's
+    // hash/size were recorded by the create request above; this uploads bytes
+    // straight to object storage. Use a plain http.put (no auth interceptors) so
+    // no Authorization header conflicts with the presigned signature.
+    final uploadResponse = await http.put(
+      Uri.parse(decoded.url),
+      headers: const {'content-type': 'application/octet-stream'},
+      body: await File(artifactPath).readAsBytes(),
+    );
 
-    final uploadResponse = await _httpClient.send(uploadRequest);
-
-    if (!uploadResponse.isSuccess) {
+    if (uploadResponse.statusCode != 200 && uploadResponse.statusCode != 201) {
       throw CodePushException(
         message:
-            '''Failed to upload artifact (${uploadResponse.reasonPhrase} '${uploadResponse.statusCode})''',
+            '''Failed to upload artifact (${uploadResponse.reasonPhrase} ${uploadResponse.statusCode})''',
       );
     }
   }
