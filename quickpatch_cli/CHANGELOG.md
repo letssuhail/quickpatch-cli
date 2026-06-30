@@ -1,3 +1,7 @@
+## 1.6.126
+
+- **Reliable large-artifact uploads (direct-to-R2)**: release & patch artifacts now upload **directly to object storage via a presigned URL** instead of being proxied through the API server. Large release artifacts (the iOS interpreter base is ~40MB+) previously failed with a connection reset when the API server ran behind a memory/edge-limited host (e.g. Railway); they now upload reliably regardless of artifact size or host. Requires the matching server update that returns presigned upload URLs.
+
 ## 1.6.125
 
 - **Publish-time smoke-test gate (Android)**: before an Android patch is uploaded, `quickpatch patch` now builds the patched app as an APK, installs and launches it on a connected device/emulator, and verifies it reaches its first frame. If the patched app **crashes or hangs on startup**, the patch is **not published** (the command exits non-zero) — so a startup-crashing patch never reaches your users. Detection uses the OS first-frame signal (`ActivityManager: Displayed`) for success, and logcat crash markers / a render timeout for failure. Runs automatically when a device is connected; skipped (with a warning for the `stable` track) when none is. Control it with `--no-smoke-test` and `--smoke-test-timeout=<seconds>` (default 45). Device-proven: a startup-crash patch is blocked; a healthy patch passes and publishes.
