@@ -18,6 +18,23 @@ base_url: https://example.com
       expect(quickpatchYaml.baseUrl, 'https://example.com');
     });
 
+    test('tolerates patch_public_key(s) — build-time key embedding for the '
+        'native signing path (regression: disallowUnrecognizedKeys)', () {
+      const yaml = '''
+app_id: test_app_id
+base_url: https://example.com
+patch_public_key: MIIBPRIMARY==
+patch_public_keys: ROT1,ROT2
+''';
+      final quickpatchYaml = checkedYamlDecode(
+        yaml,
+        (m) => QuickPatchYaml.fromJson(m!),
+      );
+      expect(quickpatchYaml.baseUrl, 'https://example.com');
+      expect(quickpatchYaml.patchPublicKey, 'MIIBPRIMARY==');
+      expect(quickpatchYaml.patchPublicKeys, 'ROT1,ROT2');
+    });
+
     test('can be deserialized with flavors', () {
       const yaml = '''
 app_id: test_app_id1

@@ -20,6 +20,8 @@ QuickPatchYaml _$QuickPatchYamlFromJson(Map json) => $checkedCreate(
         'base_url',
         'auto_update',
         'patch_verification',
+        'patch_public_key',
+        'patch_public_keys',
       ],
     );
     final val = QuickPatchYaml(
@@ -34,6 +36,11 @@ QuickPatchYaml _$QuickPatchYamlFromJson(Map json) => $checkedCreate(
         'patch_verification',
         (v) => $enumDecodeNullable(_$PatchVerificationEnumMap, v),
       ),
+      patchPublicKey: $checkedConvert('patch_public_key', (v) => v as String?),
+      patchPublicKeys: $checkedConvert(
+        'patch_public_keys',
+        (v) => v as String?,
+      ),
     );
     return val;
   },
@@ -42,6 +49,8 @@ QuickPatchYaml _$QuickPatchYamlFromJson(Map json) => $checkedCreate(
     'baseUrl': 'base_url',
     'autoUpdate': 'auto_update',
     'patchVerification': 'patch_verification',
+    'patchPublicKey': 'patch_public_key',
+    'patchPublicKeys': 'patch_public_keys',
   },
 );
 
@@ -53,6 +62,8 @@ Map<String, dynamic> _$QuickPatchYamlToJson(
   'base_url': instance.baseUrl,
   'auto_update': instance.autoUpdate,
   'patch_verification': _$PatchVerificationEnumMap[instance.patchVerification],
+  'patch_public_key': instance.patchPublicKey,
+  'patch_public_keys': instance.patchPublicKeys,
 };
 
 const _$PatchVerificationEnumMap = {

@@ -281,9 +281,14 @@ $stderr''');
       final mirror =
           platform.environment['QUICKPATCH_STORAGE_BASE_URL'] ??
           (hostedUrl != null ? '$hostedUrl/storage' : null);
+      // With a mirror, route engine downloads through it (it serves the
+      // download.quickpatch.dev bucket under that path). With NO mirror
+      // (no hosted URL / base_url), fall back to Flutter's real storage host
+      // (GCS) — NOT the bare `download.quickpatch.dev`, which is not a resolvable
+      // host and made engine resolution fail with NXDOMAIN.
       final flutterStorageBaseUrl = mirror != null
           ? '$mirror/download.quickpatch.dev'
-          : 'https://download.quickpatch.dev';
+          : 'https://storage.googleapis.com';
       // Prepend the vended Flutter's bin to PATH so any `flutter`/`dart` the
       // Flutter tool resolves via PATH internally (e.g. its post-build
       // `which flutter` + `pub get`) is the QuickPatch-pinned one, not a

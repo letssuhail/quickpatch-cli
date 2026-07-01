@@ -25,6 +25,8 @@ class QuickPatchYaml {
     this.baseUrl,
     this.autoUpdate,
     this.patchVerification,
+    this.patchPublicKey,
+    this.patchPublicKeys,
   });
 
   /// Creates a [QuickPatchYaml] from a JSON map.
@@ -61,6 +63,16 @@ class QuickPatchYaml {
 
   /// The patch verification mode for the app.
   final PatchVerification? patchVerification;
+
+  /// Base64-encoded public key the on-device updater uses to verify patch
+  /// signatures. Embedded into the bundled config at build time (on vanilla
+  /// Flutter, which lacks the fork's flutter_tools key-injection). Not secret.
+  final String? patchPublicKey;
+
+  /// Comma-separated additional trusted public keys for signing-key rotation:
+  /// a patch verifies if its signature matches [patchPublicKey] or any of
+  /// these. See the updater's `build_trusted_public_keys`.
+  final String? patchPublicKeys;
 }
 
 /// Extension on [QuickPatchYaml] to get the app id for a specific flavor.
