@@ -85,6 +85,19 @@ class IosReleaser extends Releaser with AppleReleaserMixin {
 
   @override
   Future<FileSystemEntity> buildReleaseArtifacts() async {
+    // Ensure the QuickPatch iOS engine + flutter_tools signing patch are set up
+    // for the TARGET Flutter revision. assertArgsAreValid() runs these too, but
+    // BEFORE the target revision is installed and OUTSIDE its
+    // flutterRevisionOverride scope — so when the target differs from the
+    // installed default (the multi-version case, e.g. building stable 3.44.0
+    // while the default pin is the rc3 fork), only the wrong (default) Flutter
+    // dir gets set up and the build then fails on a missing engine toolchain.
+    // Re-running here (inside the target scope, after installRevision) installs
+    // them into the dir we actually build in. Both are idempotent (stamp /
+    // already-patched checks), so this is a no-op when the target == default.
+    await ensureQuickPatchIosEngine();
+    ensureQuickPatchFlutterToolsPatched();
+
     if (!codesign) {
       logger
         ..info(

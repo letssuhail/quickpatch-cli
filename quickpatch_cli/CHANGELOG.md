@@ -1,3 +1,7 @@
+## 1.6.127
+
+- **Support for Flutter 3.44.0 stable**: `quickpatch release`/`patch` now work on apps built with **stable Flutter 3.44.0** (revision `559ffa3f75…`), in addition to the 3.44.0-rc3 pin. Stable 3.44.0 pins the identical Dart SDK revision as the rc3 fork, so it reuses the same on-device engine revision (snapshot hash unchanged) — no new engine download is required. Target it by revision: `quickpatch release ios --interpreter --flutter-version 559ffa3f75e7402d65a8def9c28389a9b2e6fe42`. (`getRevisionForVersion` also gained an upstream-tag fallback so a plain `--flutter-version 3.44.0` resolves to stable on a vanilla-Flutter clone; on the legacy Shorebird-fork clone the fork's `flutter_release/3.44.0` branch still points at the rc3 pin, so use the revision there.)
+
 ## 1.6.126
 
 - **Reliable large-artifact uploads (direct-to-R2)**: release & patch artifacts now upload **directly to object storage via a presigned URL** instead of being proxied through the API server. Large release artifacts (the iOS interpreter base is ~40MB+) previously failed with a connection reset when the API server ran behind a memory/edge-limited host (e.g. Railway); they now upload reliably regardless of artifact size or host. Requires the matching server update that returns presigned upload URLs.

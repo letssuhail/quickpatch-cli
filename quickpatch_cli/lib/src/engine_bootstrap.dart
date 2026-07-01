@@ -20,7 +20,18 @@ const _engineRevisionForFlutterRevision = <String, String>{
   // adds arbitrary-code-push (Dart interpreter / dynamic modules) ON TOP of the
   // data-only instruction-reuse path — a strict superset. Releases + patches
   // built against the old dd03f6ff engine must be rebuilt on this revision.
+  // Flutter 3.44.0-rc3 fork.
   '1a55eb72b61a6c8acac0bf7f7d4738f399f83a0f':
+      '76ba1f79062a25f3e339546db98d259d',
+  // Flutter 3.44.0 STABLE. Maps to the SAME engine revision as the rc3 entry
+  // above because stable 3.44.0 pins the IDENTICAL Dart SDK revision
+  // (98116461144f4429ab873f8497023a5ec3b08127) as the rc3 fork. The on-device
+  // snapshot-version hash is derived purely from the Dart VM source, so it is
+  // unchanged (76ba1f79...) — the entire Dart toolchain (gen_snapshot,
+  // dart2bytecode, gen_kernel, gen_dynamic_interface.aot) and the published
+  // engine bundle are reused as-is. Only the Flutter engine C++ commit differs
+  // (rc3 6500c84e -> stable 4c525dac5e), an ABI-compatible same-minor delta.
+  '559ffa3f75e7402d65a8def9c28389a9b2e6fe42':
       '76ba1f79062a25f3e339546db98d259d',
 };
 
@@ -89,18 +100,27 @@ Future<void> ensureQuickPatchIosEngine() async {
 
     final extract = Directory(p.join(tmp.path, 'extract'))
       ..createSync(recursive: true);
-    File(p.join(tmp.path, 'SHA256SUMS.txt'))
-        .copySync(p.join(extract.path, 'SHA256SUMS.txt'));
     await _run('tar', ['-xzf', tarball, '-C', extract.path]);
-    // Integrity: SHA256SUMS.txt lists ios-release/* relative paths.
+    // The tarball unpacks into an `ios-release/` subdirectory, and
+    // SHA256SUMS.txt lists paths RELATIVE TO THAT DIRECTORY (e.g.
+    // `./gen_snapshot_arm64`, `./Flutter.xcframework/...`). So verify from
+    // inside `ios-release/` — copy the separately-downloaded sums file there
+    // and run shasum with that as the working directory.
+    final src = p.join(extract.path, 'ios-release');
+    // Integrity check. The published SHA256SUMS.txt lists paths relative to the
+    // `ios-release/` directory, but it also records a hash of ITSELF — a
+    // self-referential entry that can never verify (writing that line changes
+    // the file). Verify only the engine files: write a filtered copy that drops
+    // the self-entry, then run shasum from inside `ios-release/`.
+    final sumsLines = File(p.join(tmp.path, 'SHA256SUMS.txt')).readAsLinesSync();
+    File(p.join(src, 'SHA256SUMS.check')).writeAsStringSync(
+      '${sumsLines.where((l) => !l.trimRight().endsWith('SHA256SUMS.txt')).join('\n')}\n',
+    );
     await _run(
       'shasum',
-      ['-a', '256', '-c', 'SHA256SUMS.txt'],
-      workingDirectory: extract.path,
+      ['-a', '256', '-c', 'SHA256SUMS.check'],
+      workingDirectory: src,
     );
-
-    // Overlay the QuickPatch-built files into the Flutter cache.
-    final src = p.join(extract.path, 'ios-release');
     final fwDir = Directory(
       p.join(cacheDir.path, 'Flutter.xcframework', 'ios-arm64',
           'Flutter.framework'),

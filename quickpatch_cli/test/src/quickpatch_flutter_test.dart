@@ -675,6 +675,39 @@ $revision
           ).called(1);
         });
       });
+
+      group('when no fork release branch exists but a tag does', () {
+        const revision = '559ffa3f75e7402d65a8def9c28389a9b2e6fe42';
+        setUp(() {
+          when(
+            () => git.revParse(
+              revision: 'refs/remotes/origin/flutter_release/$version',
+              directory: any(named: 'directory'),
+            ),
+          ).thenThrow(exception);
+          when(
+            () => git.revParse(
+              revision: 'refs/tags/$version',
+              directory: any(named: 'directory'),
+            ),
+          ).thenAnswer((_) async => '$revision\n');
+        });
+
+        test('falls back to the upstream tag revision', () async {
+          await expectLater(
+            runWithOverrides(
+              () => quickpatchFlutter.getRevisionForVersion(version),
+            ),
+            completion(equals(revision)),
+          );
+          verify(
+            () => git.revParse(
+              revision: 'refs/tags/$version',
+              directory: any(named: 'directory'),
+            ),
+          ).called(1);
+        });
+      });
     });
 
     group('getVersionString', () {

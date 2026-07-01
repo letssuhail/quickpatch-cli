@@ -335,16 +335,28 @@ class QuickPatchFlutter {
 
   /// Returns the git revision for the provided [version].
   /// e.g. 3.16.3 -> b9b23902966504a9778f4c07e3a3487fa84dcb2a
+  ///
+  /// Resolves against the QuickPatch fork's `flutter_release/<version>` release
+  /// branch first (it carries QuickPatch's specific pin), then falls back to the
+  /// upstream Flutter `<version>` git tag — so a vanilla stable release such as
+  /// `3.44.0`, which has no fork release branch, still resolves directly.
   Future<String?> getRevisionForVersion(String version) async {
-    try {
-      final result = await git.revParse(
-        revision: 'refs/remotes/origin/flutter_release/$version',
-        directory: _workingDirectory(),
-      );
-      return LineSplitter.split(result).toList().firstOrNull;
-    } on ProcessException {
-      return null;
+    for (final ref in [
+      'refs/remotes/origin/flutter_release/$version',
+      'refs/tags/$version',
+    ]) {
+      try {
+        final result = await git.revParse(
+          revision: ref,
+          directory: _workingDirectory(),
+        );
+        final revision = LineSplitter.split(result).toList().firstOrNull;
+        if (revision != null && revision.isNotEmpty) return revision;
+      } on ProcessException {
+        // This ref form doesn't exist in the clone; try the next one.
+      }
     }
+    return null;
   }
 
   /// Get the list of Flutter versions supported by this QuickPatch installation.

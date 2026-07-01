@@ -112,6 +112,15 @@ class IosPatcher extends Patcher
 
   @override
   Future<File> buildPatchArtifact({String? releaseVersion}) async {
+    // Ensure the QuickPatch iOS engine + flutter_tools signing patch are set up
+    // for the TARGET (release's) Flutter revision. assertArgsAreValid() runs
+    // these too, but before the release's revision is installed/scoped — so for
+    // a release built on a non-default Flutter revision (multi-version), only
+    // the wrong Flutter dir gets set up. Re-running here (inside the target
+    // scope) installs them for the dir we actually build in. Idempotent.
+    await ensureQuickPatchIosEngine();
+    ensureQuickPatchFlutterToolsPatched();
+
     final shouldCodesign = argResults['codesign'] == true;
     final (flutterVersionAndRevision, flutterVersion) = await (
       quickpatchFlutter.getVersionAndRevision(),
