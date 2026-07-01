@@ -358,11 +358,14 @@ of the iOS app that is using this module. (aar and ios-framework only)''',
         // Restored after the build so the developer's checked-in file is intact.
         final restoreQuickPatchYaml = embedPatchPublicKeysInProjectYaml(
           base64PublicKey: await releaser.getEncodedPublicKey(),
-          rotationPublicKeys: (platform.environment['SHOREBIRD_PUBLIC_KEYS'] ?? '')
-              .split(',')
-              .map((k) => k.trim())
-              .where((k) => k.isNotEmpty)
-              .toList(),
+          rotationPublicKeys:
+              (platform.environment['QUICKPATCH_PUBLIC_KEYS'] ??
+                      platform.environment['SHOREBIRD_PUBLIC_KEYS'] ??
+                      '')
+                  .split(',')
+                  .map((k) => k.trim())
+                  .where((k) => k.isNotEmpty)
+                  .toList(),
         );
         final FileSystemEntity releaseArtifact;
         try {

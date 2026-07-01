@@ -242,9 +242,11 @@ If left checked, Xcode will rewrite the build number in the uploaded IPA, so the
           // Additional trusted keys (comma-separated) for signing-key rotation,
           // so the bootstrapper also accepts a patch signed by a rotated key.
           // Same env var the build pipeline forwards (see ArtifactBuilder).
-          rotationPublicKeysBase64: (Platform
-                      .environment['SHOREBIRD_PUBLIC_KEYS'] ??
-                  '')
+          // User-facing var is QUICKPATCH_PUBLIC_KEYS (legacy name accepted too).
+          rotationPublicKeysBase64:
+              (Platform.environment['QUICKPATCH_PUBLIC_KEYS'] ??
+                      Platform.environment['SHOREBIRD_PUBLIC_KEYS'] ??
+                      '')
               .split(',')
               .map((k) => k.trim())
               .where((k) => k.isNotEmpty)

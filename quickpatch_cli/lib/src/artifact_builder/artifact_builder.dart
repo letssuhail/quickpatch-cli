@@ -75,6 +75,8 @@ Map<String, String>? buildEnvironment({
 }) {
   final env = <String, String>{};
   if (base64PublicKey != null) {
+    // Emit both the QuickPatch name and the legacy name for downstream compat.
+    env['QUICKPATCH_PUBLIC_KEY'] = base64PublicKey;
     env['SHOREBIRD_PUBLIC_KEY'] = base64PublicKey;
   }
   // Forward additional trusted public keys (comma-separated) used for
@@ -82,9 +84,13 @@ Map<String, String>? buildEnvironment({
   // signature verifies against the primary key OR any of these, so a
   // rotated key can be trusted before the old key is retired. Forwarded
   // explicitly so it reaches the Flutter build subprocess regardless of
-  // parent-environment propagation.
-  final rotationPublicKeys = Platform.environment['SHOREBIRD_PUBLIC_KEYS'];
+  // parent-environment propagation. The user-facing var is
+  // QUICKPATCH_PUBLIC_KEYS; the legacy name is still accepted as a fallback.
+  final rotationPublicKeys =
+      Platform.environment['QUICKPATCH_PUBLIC_KEYS'] ??
+      Platform.environment['SHOREBIRD_PUBLIC_KEYS'];
   if (rotationPublicKeys != null && rotationPublicKeys.isNotEmpty) {
+    env['QUICKPATCH_PUBLIC_KEYS'] = rotationPublicKeys;
     env['SHOREBIRD_PUBLIC_KEYS'] = rotationPublicKeys;
   }
   if (ddMaxBytes != null) {
