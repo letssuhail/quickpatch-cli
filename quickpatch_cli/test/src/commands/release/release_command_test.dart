@@ -158,6 +158,9 @@ void main() {
       when(() => releaser.artifactDisplayName).thenReturn(artifactDisplayName);
       when(() => releaser.assertPreconditions()).thenAnswer((_) async => {});
       when(() => releaser.assertArgsAreValid()).thenAnswer((_) async => {});
+      // The command embeds the patch public key into quickpatch.yaml around the
+      // build; with no key it's a no-op (no project-root access needed).
+      when(() => releaser.getEncodedPublicKey()).thenAnswer((_) async => null);
       when(
         () => releaser.buildReleaseArtifacts(),
       ).thenAnswer((_) async => File(''));
