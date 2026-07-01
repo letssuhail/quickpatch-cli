@@ -115,32 +115,40 @@ Please comment and upvote ${link(uri: Uri.parse('https://github.com/letssuhail/q
 
   @override
   Future<FileSystemEntity> buildReleaseArtifacts() async {
-    final base64PublicKey = await getEncodedPublicKey();
-    final buildArgs = [...argResults.forwardedArgs];
-    addSplitDebugInfoDefault(buildArgs);
-    await addObfuscationMapArgs(buildArgs);
-    final aab = await artifactBuilder.buildAppBundle(
-      flavor: flavor,
-      target: target,
-      targetPlatforms: architectures,
-      args: buildArgs,
-      base64PublicKey: base64PublicKey,
-    );
-
-    verifyObfuscationMap();
-
-    if (generateApk) {
-      logger.info('Building APK');
-      await artifactBuilder.buildApk(
+    // On a vanilla-engine Flutter (e.g. stable), swap in the QuickPatch Android
+    // engine for the build so libflutter carries the on-device updater and OTA
+    // patches apply. Restored after the build.
+    final restoreEngine = ensureQuickPatchAndroidEngine();
+    try {
+      final base64PublicKey = await getEncodedPublicKey();
+      final buildArgs = [...argResults.forwardedArgs];
+      addSplitDebugInfoDefault(buildArgs);
+      await addObfuscationMapArgs(buildArgs);
+      final aab = await artifactBuilder.buildAppBundle(
         flavor: flavor,
         target: target,
         targetPlatforms: architectures,
         args: buildArgs,
         base64PublicKey: base64PublicKey,
       );
-    }
 
-    return aab;
+      verifyObfuscationMap();
+
+      if (generateApk) {
+        logger.info('Building APK');
+        await artifactBuilder.buildApk(
+          flavor: flavor,
+          target: target,
+          targetPlatforms: architectures,
+          args: buildArgs,
+          base64PublicKey: base64PublicKey,
+        );
+      }
+
+      return aab;
+    } finally {
+      restoreEngine();
+    }
   }
 
   @override

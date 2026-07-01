@@ -252,6 +252,67 @@ void main() {
     });
   });
 
+  group('ensureQuickPatchAndroidEngine', () {
+    late Directory flutterDir;
+    late QuickPatchEnv quickpatchEnv;
+    late QuickPatchLogger logger;
+
+    File engineVersion() =>
+        File(p.join(flutterDir.path, 'bin', 'internal', 'engine.version'));
+
+    R runWithOverrides<R>(R Function() body) => runScoped(
+          body,
+          values: {
+            quickpatchEnvRef.overrideWith(() => quickpatchEnv),
+            loggerRef.overrideWith(() => logger),
+          },
+        );
+
+    setUp(() {
+      flutterDir = Directory.systemTemp.createTempSync('qp_androidengine');
+      quickpatchEnv = MockQuickPatchEnv();
+      logger = MockQuickPatchLogger();
+      when(() => quickpatchEnv.flutterDirectory).thenReturn(flutterDir);
+    });
+
+    tearDown(() {
+      if (flutterDir.existsSync()) flutterDir.deleteSync(recursive: true);
+    });
+
+    test('maps the vanilla stable engine to the QuickPatch engine, then '
+        'restores', () {
+      engineVersion()
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('4c525dac5ebe5971c5708ef73558ed8edcf4a362');
+      final restore = runWithOverrides(ensureQuickPatchAndroidEngine);
+      expect(
+        engineVersion().readAsStringSync(),
+        '6500c84eba818b598fb967bd0276e6e50cdd02c9',
+      );
+      restore();
+      expect(
+        engineVersion().readAsStringSync(),
+        '4c525dac5ebe5971c5708ef73558ed8edcf4a362',
+      );
+    });
+
+    test('is a no-op for an unmapped engine (restore is safe)', () {
+      engineVersion()
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
+      final restore = runWithOverrides(ensureQuickPatchAndroidEngine);
+      expect(
+        engineVersion().readAsStringSync(),
+        'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+      );
+      restore();
+      expect(
+        engineVersion().readAsStringSync(),
+        'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+      );
+    });
+  });
+
   group('embedPatchPublicKeysInProjectYaml', () {
     late Directory projectDir;
     late QuickPatchEnv quickpatchEnv;

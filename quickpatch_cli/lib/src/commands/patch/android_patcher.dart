@@ -93,6 +93,18 @@ See more info about the issue ${link(uri: Uri.parse('https://github.com/letssuha
 
   @override
   Future<File> buildPatchArtifact({String? releaseVersion}) async {
+    // Build the patch against the same QuickPatch Android engine the release
+    // used (see ensureQuickPatchAndroidEngine), so the patch diff matches the
+    // installed app's snapshot. Restored after the build.
+    final restoreEngine = ensureQuickPatchAndroidEngine();
+    try {
+      return await _buildPatchArtifact(releaseVersion: releaseVersion);
+    } finally {
+      restoreEngine();
+    }
+  }
+
+  Future<File> _buildPatchArtifact({String? releaseVersion}) async {
     final flutterVersion = await quickpatchFlutter.getVersion();
     // Android versions prior to 3.24.2 have a bug that can cause patches to
     // be erroneously uninstalled.

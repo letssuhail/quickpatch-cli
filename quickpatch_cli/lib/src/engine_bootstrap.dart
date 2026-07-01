@@ -357,6 +357,52 @@ void Function() embedPatchPublicKeysInProjectYaml({
   };
 }
 
+/// Maps a vanilla Flutter engine commit (as recorded in the checkout's
+/// `bin/internal/engine.version`) to the QuickPatch-built Android engine commit
+/// that carries the on-device updater. Stable Flutter ships a vanilla engine
+/// with no code-push support, so Android code-push must swap in the QuickPatch
+/// engine — the Android analog of how iOS reuses the QuickPatch engine bundle.
+/// The mapped engine's gen_snapshot is served alongside it, so the built app is
+/// snapshot-consistent with the runtime.
+const _quickPatchAndroidEngineForVanilla = <String, String>{
+  // stable 3.44.0 vanilla engine -> QuickPatch engine (carries the updater).
+  '4c525dac5ebe5971c5708ef73558ed8edcf4a362':
+      '6500c84eba818b598fb967bd0276e6e50cdd02c9',
+};
+
+/// For the duration of an Android build, repoints the Flutter SDK's
+/// `bin/internal/engine.version` at the QuickPatch Android engine when the
+/// checkout ships a vanilla engine (no updater) — see
+/// [_quickPatchAndroidEngineForVanilla]. gradle then resolves the QuickPatch
+/// `libflutter` (with the updater) from the mirror and Flutter fetches the
+/// matching gen_snapshot, so the app is updater-equipped and snapshot-consistent
+/// and OTA patches apply. Returns a restore callback that puts the original
+/// `engine.version` back (no-op when no mapping applies).
+void Function() ensureQuickPatchAndroidEngine() {
+  void noop() {}
+  final versionFile = File(
+    p.join(quickpatchEnv.flutterDirectory.path, 'bin', 'internal',
+        'engine.version'),
+  );
+  if (!versionFile.existsSync()) return noop;
+  final original = versionFile.readAsStringSync();
+  final current = original.trim();
+  final mapped = _quickPatchAndroidEngineForVanilla[current];
+  if (mapped == null || mapped == current) return noop;
+  versionFile.writeAsStringSync(mapped);
+  logger.detail(
+    '[engine] Android: building against QuickPatch engine $mapped in place of '
+    'the vanilla $current (adds the on-device updater for code push).',
+  );
+  return () {
+    try {
+      versionFile.writeAsStringSync(original);
+    } on FileSystemException {
+      // best-effort restore
+    }
+  };
+}
+
 /// Repoints the flutter_tools asset-injection guard at `quickpatch.yaml` so the
 /// build-time public key is embedded in QuickPatch projects. Returns whether the
 /// file was changed (false if absent, already patched, or not safely matchable).
