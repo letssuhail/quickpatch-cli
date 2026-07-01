@@ -99,6 +99,7 @@ int loadModuleAsPatch(Uint8List bytes, String prefix) =>
     String channel = 'stable',
     String? publicKeyBase64,
     List<String> rotationPublicKeysBase64 = const [],
+    bool appUsesCodePush = false,
   }) {
     if (mode == 'ota') {
       assert(otaPatchUrl != null, 'ota mode requires otaPatchUrl');
@@ -124,6 +125,7 @@ int loadModuleAsPatch(Uint8List bytes, String prefix) =>
         otaDelaySeconds: otaDelay.inSeconds,
         publicKeyBase64: publicKeyBase64 ?? '',
         rotationPublicKeysBase64: rotationPublicKeysBase64,
+        appUsesCodePush: appUsesCodePush,
       );
     }
     assert(mode == 'argv' || mode == 'asset', 'mode must be argv|asset|ota');
@@ -263,6 +265,7 @@ int loadModuleAsPatch(Uint8List bytes, String prefix) =>
     required int otaDelaySeconds,
     required String publicKeyBase64,
     List<String> rotationPublicKeysBase64 = const [],
+    bool appUsesCodePush = false,
   }) {
     final base = baseUrl.replaceAll(RegExp(r'/+$'), '');
     // The ordered set of keys the bootstrapper trusts to verify a patch:
@@ -288,7 +291,31 @@ int loadModuleAsPatch(Uint8List bytes, String prefix) =>
       ..writeln("import 'package:dynamic_modules/dynamic_modules.dart';")
       ..writeln("import 'package:asn1lib/asn1lib.dart' as asn1;")
       ..writeln("import 'package:crypto/crypto.dart' as crypto;")
-      ..writeln("import 'package:pointycastle/pointycastle.dart' as pc;")
+      ..writeln("import 'package:pointycastle/pointycastle.dart' as pc;");
+    // When the app depends on quickpatch_code_push, import + reference it here so
+    // its FULL transitive surface — including the private dart:ffi/dart:isolate
+    // runtime helpers (e.g. _loadAbiSpecificInt, Isolate.run) its native
+    // bindings use — is reachable from this AOT bootstrapper's roots and thus
+    // RETAINED in the base image. The interpreted app module ships its own copy
+    // of quickpatch_code_push as bytecode and resolves those helpers against the
+    // base; without this they get tree-shaken and the interpreter FATALs at
+    // module load. @pragma('vm:entry-point') keeps the retainer even though
+    // nothing calls it.
+    if (appUsesCodePush) {
+      b
+        ..writeln(
+          "import 'package:quickpatch_code_push/quickpatch_code_push.dart' as qpcp;")
+        ..writeln()
+        ..writeln("@pragma('vm:entry-point')")
+        ..writeln('List<Object?> _qpRetainCodePush() {')
+        ..writeln('  final u = qpcp.QuickPatchUpdater();')
+        ..writeln('  return <Object?>[')
+        ..writeln('    u.checkForUpdate, u.update, u.readCurrentPatch,')
+        ..writeln('    u.readNextPatch, u.isAvailable,')
+        ..writeln('  ];')
+        ..writeln('}');
+    }
+    b
       ..writeln()
       ..writeln("const _base = '$base';")
       ..writeln("const _appId = '$appId';")

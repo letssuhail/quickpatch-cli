@@ -207,6 +207,15 @@ If left checked, Xcode will rewrite the build number in the uploaded IPA, so the
     final qpmod = File(p.join(root, 'assets', 'app.qpmod'));
     final pubspec = File(p.join(root, 'pubspec.yaml'));
     final pubspecBackup = pubspec.readAsStringSync();
+    // If the app depends on quickpatch_code_push, the bootstrapper imports +
+    // references it so its full transitive FFI surface (incl. private
+    // dart:ffi/dart:isolate runtime helpers the interpreted module calls) is
+    // reachable from the base AOT roots and retained — otherwise the interpreter
+    // FATALs at module load resolving those private helpers.
+    final appUsesCodePush = RegExp(
+      r'^\s*quickpatch_code_push\s*:',
+      multiLine: true,
+    ).hasMatch(pubspecBackup);
 
     Future<void> run(String exe, List<String> args, String label) async {
       final r = await process.run(exe, args);
@@ -225,6 +234,7 @@ If left checked, Xcode will rewrite the build number in the uploaded IPA, so the
           serverBaseUrl: baseUrl,
           appId: appId,
           releaseVersion: version,
+          appUsesCodePush: appUsesCodePush,
           // SECURITY: embed the release public key so the on-device bootstrapper
           // verifies each patch's signature before applying it. Empty when no
           // --public-key was provided (unsigned mode).
@@ -310,6 +320,30 @@ If left checked, Xcode will rewrite the build number in the uploaded IPA, so the
         iface,
         '--app-package=$appPkg',
       ], 'gen interface');
+
+      // The interface generator omits dart:isolate and dart:ffi from the
+      // callable SDK surface (ffi is even in its exclude list). But
+      // quickpatch_code_push — bundled into the interpreted app module — calls
+      // Isolate.run (dart:isolate) and uses dart:ffi (nullptr/Pointer) to reach
+      // the native updater. Without these marked callable, gen_kernel
+      // tree-shakes them out of the AOT base and the interpreter FATALs at
+      // module load ("Unable to find function ... in dart:isolate / dart:ffi").
+      // Mark them callable + usable-as-type so they are retained and resolvable
+      // by the interpreted module.
+      final ifaceFile = File(iface);
+      if (ifaceFile.existsSync()) {
+        var ifaceText = ifaceFile.readAsStringSync();
+        for (final lib in const ['dart:isolate', 'dart:ffi']) {
+          if (ifaceText.contains("library: '$lib'")) continue;
+          for (final section in const ['callable:', 'can-be-used-as-type:']) {
+            ifaceText = ifaceText.replaceFirst(
+              '$section\n',
+              "$section\n  - library: '$lib'\n",
+            );
+          }
+        }
+        ifaceFile.writeAsStringSync(ifaceText);
+      }
 
       // 2. App bytecode module (the whole app), bundled as an asset.
       qpmod.parent.createSync(recursive: true);

@@ -97,6 +97,36 @@ void main() {
         expect(src, isNot(contains('reassembleApplication()')));
       });
 
+      test('server mode with appUsesCodePush imports + retains '
+          'quickpatch_code_push (so its FFI/isolate surface stays in the base)',
+          () {
+        final src = InterpreterBuild.generateBootstrapperMain(
+          mode: 'server',
+          serverBaseUrl: 'https://qp.example',
+          appId: 'app-123',
+          releaseVersion: '1.0.0+1',
+          appUsesCodePush: true,
+        );
+        expect(
+          src,
+          contains(
+              "import 'package:quickpatch_code_push/quickpatch_code_push.dart' as qpcp;"),
+        );
+        expect(src, contains("@pragma('vm:entry-point')"));
+        expect(src, contains('qpcp.QuickPatchUpdater()'));
+      });
+
+      test('server mode WITHOUT appUsesCodePush does not import '
+          'quickpatch_code_push (default)', () {
+        final src = InterpreterBuild.generateBootstrapperMain(
+          mode: 'server',
+          serverBaseUrl: 'https://qp.example',
+          appId: 'app-123',
+          releaseVersion: '1.0.0+1',
+        );
+        expect(src, isNot(contains('quickpatch_code_push')));
+      });
+
       test('server mode bakes the primary key into the trusted-key list', () {
         final src = InterpreterBuild.generateBootstrapperMain(
           mode: 'server',
