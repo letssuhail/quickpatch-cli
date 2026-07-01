@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:mocktail/mocktail.dart';
@@ -212,6 +213,42 @@ void main() {
       expect(yamlCompilerFile().readAsStringSync(),
           contains("compiled['patch_public_keys']"));
       expect(snapshot().existsSync(), isFalse);
+    });
+  });
+
+  group('binaryEmbedsRevision', () {
+    late Directory tmp;
+    const rev = '76ba1f79062a25f3e339546db98d259d';
+
+    setUp(() => tmp = Directory.systemTemp.createTempSync('qp_embed'));
+    tearDown(() => tmp.deleteSync(recursive: true));
+
+    File binaryWith(List<int> bytes) =>
+        File(p.join(tmp.path, 'gen_snapshot_arm64'))..writeAsBytesSync(bytes);
+
+    test(
+        'true when the revision appears as an ASCII substring surrounded by '
+        'non-text bytes', () {
+      final file = binaryWith([
+        0x00, 0xFF, 0x7F, 0x01, // non-text bytes
+        ...utf8.encode('...version=$rev...'),
+        0x00, 0xFE,
+      ]);
+      expect(binaryEmbedsRevision(file, rev), isTrue);
+    });
+
+    test('false when the on-disk binary is a stock engine (different hash)', () {
+      final file = binaryWith(
+        utf8.encode('...version=41be3daaabd524b8aa7423bc24584957...'),
+      );
+      expect(binaryEmbedsRevision(file, rev), isFalse);
+    });
+
+    test('false when the file does not exist (treated as needs re-install)', () {
+      expect(
+        binaryEmbedsRevision(File(p.join(tmp.path, 'missing')), rev),
+        isFalse,
+      );
     });
   });
 }

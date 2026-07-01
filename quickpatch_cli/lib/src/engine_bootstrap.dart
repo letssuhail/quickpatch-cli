@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 import 'package:quickpatch_cli/src/logging/logging.dart';
 import 'package:quickpatch_cli/src/platform.dart';
@@ -75,9 +76,28 @@ Future<void> ensureQuickPatchIosEngine() async {
     ),
   );
   final stamp = File(p.join(cacheDir.path, '.quickpatch-engine-rev'));
-  if (stamp.existsSync() && stamp.readAsStringSync().trim() == engineRevision) {
+  final genSnapshot = File(p.join(cacheDir.path, 'gen_snapshot_arm64'));
+  // The stamp alone is NOT proof the overlay is intact. A prior partial overlay
+  // (interrupted mid-copy) or a `flutter precache` / artifact re-materialization
+  // can leave the stamp in place while `gen_snapshot_arm64` has reverted to the
+  // STOCK Flutter build. An app AOT-compiled by a stock gen_snapshot produces a
+  // snapshot whose version hash the QuickPatch runtime engine refuses to load
+  // (-> white screen / "Wrong full snapshot version"). So also verify the
+  // on-disk gen_snapshot actually embeds the engine revision before trusting the
+  // stamp. gen_snapshot is copied after the framework in the overlay below, so
+  // if it carries the rev the rest of the overlay completed too.
+  if (stamp.existsSync() &&
+      stamp.readAsStringSync().trim() == engineRevision &&
+      genSnapshot.existsSync() &&
+      binaryEmbedsRevision(genSnapshot, engineRevision)) {
     logger.detail('[engine] QuickPatch iOS engine $engineRevision present.');
     return;
+  }
+  if (stamp.existsSync()) {
+    logger.detail(
+      '[engine] iOS engine stamp present but gen_snapshot is stale/stock — '
+      're-installing $engineRevision.',
+    );
   }
 
   final progress = logger.progress(
@@ -192,6 +212,23 @@ Future<void> ensureQuickPatchIosEngine() async {
     } on Exception {
       // best-effort cleanup
     }
+  }
+}
+
+/// Whether [file] (a Mach-O binary) embeds the [revision] string. The Dart VM
+/// snapshot-version hash is compiled into gen_snapshot / analyze_snapshot /
+/// Flutter as an ASCII string, so a byte-substring scan reliably distinguishes
+/// the QuickPatch engine build from the stock Flutter one that a `flutter
+/// precache` may have restored. latin1 maps each byte 1:1 to a code unit, so
+/// `contains` on the decoded text is an exact byte-substring search. Best-effort:
+/// returns false on any read error (treated as "needs re-install").
+@visibleForTesting
+bool binaryEmbedsRevision(File file, String revision) {
+  try {
+    final bytes = file.readAsBytesSync();
+    return latin1.decode(bytes, allowInvalid: true).contains(revision);
+  } on Object {
+    return false;
   }
 }
 
