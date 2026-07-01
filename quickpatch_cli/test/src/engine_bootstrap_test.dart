@@ -251,4 +251,79 @@ void main() {
       );
     });
   });
+
+  group('embedPatchPublicKeysInProjectYaml', () {
+    late Directory projectDir;
+    late QuickPatchEnv quickpatchEnv;
+    late QuickPatchLogger logger;
+
+    File yaml() => File(p.join(projectDir.path, 'quickpatch.yaml'));
+
+    R runWithOverrides<R>(R Function() body) => runScoped(
+          body,
+          values: {
+            quickpatchEnvRef.overrideWith(() => quickpatchEnv),
+            loggerRef.overrideWith(() => logger),
+          },
+        );
+
+    setUp(() {
+      projectDir = Directory.systemTemp.createTempSync('qp_yaml_test');
+      quickpatchEnv = MockQuickPatchEnv();
+      logger = MockQuickPatchLogger();
+      when(() => quickpatchEnv.getQuickPatchProjectRoot())
+          .thenReturn(projectDir);
+    });
+
+    tearDown(() {
+      if (projectDir.existsSync()) projectDir.deleteSync(recursive: true);
+    });
+
+    test('embeds patch_public_key into the yaml, then restores the original',
+        () {
+      const original = 'app_id: abc\nbase_url: https://x\n';
+      yaml().writeAsStringSync(original);
+      final restore = runWithOverrides(
+        () => embedPatchPublicKeysInProjectYaml(base64PublicKey: 'KEY123'),
+      );
+      expect(yaml().readAsStringSync(), contains('patch_public_key: KEY123'));
+      restore();
+      expect(yaml().readAsStringSync(), original);
+      expect(yaml().readAsStringSync(), isNot(contains('patch_public_key')));
+    });
+
+    test('emits rotation keys as comma-separated patch_public_keys', () {
+      yaml().writeAsStringSync('app_id: abc\n');
+      runWithOverrides(
+        () => embedPatchPublicKeysInProjectYaml(
+          base64PublicKey: 'PRIMARY',
+          rotationPublicKeys: ['ROT1', ' ROT2 ', ''],
+        ),
+      );
+      final s = yaml().readAsStringSync();
+      expect(s, contains('patch_public_key: PRIMARY'));
+      expect(s, contains('patch_public_keys: ROT1,ROT2'));
+    });
+
+    test('replaces any pre-existing key line (no stale keys)', () {
+      yaml().writeAsStringSync('app_id: abc\npatch_public_key: OLD\n');
+      runWithOverrides(
+        () => embedPatchPublicKeysInProjectYaml(base64PublicKey: 'NEW'),
+      );
+      final s = yaml().readAsStringSync();
+      expect(s, contains('patch_public_key: NEW'));
+      expect(s, isNot(contains('OLD')));
+    });
+
+    test('no key => no-op; restore is safe and leaves the file untouched', () {
+      const original = 'app_id: abc\n';
+      yaml().writeAsStringSync(original);
+      final restore = runWithOverrides(
+        () => embedPatchPublicKeysInProjectYaml(base64PublicKey: null),
+      );
+      expect(yaml().readAsStringSync(), original);
+      restore();
+      expect(yaml().readAsStringSync(), original);
+    });
+  });
 }

@@ -308,6 +308,55 @@ void ensureQuickPatchFlutterToolsPatched() {
   }
 }
 
+/// Embeds the patch public key(s) into the project's `quickpatch.yaml` for the
+/// duration of a build, so the bundled `flutter_assets/quickpatch.yaml` carries
+/// them and the on-device updater can verify patch signatures.
+///
+/// The fork's `flutter_tools` injected the build-time key into the yaml asset
+/// (see [_patchAssetGuard]); **vanilla** Flutter (e.g. stable 3.44.0) has no
+/// such mechanism, so without this the bundled config has no key and the native
+/// updater runs fail-open (accepts UNSIGNED patches). The public key is not
+/// secret, so we write it into `quickpatch.yaml` at build time; the ORIGINAL
+/// file is restored afterward via the returned callback (so the developer's
+/// checked-in file is untouched). Engine reads `patch_public_key` (primary) +
+/// `patch_public_keys` (comma-separated rotation keys) — see the updater's
+/// `build_trusted_public_keys`.
+///
+/// Returns a restore callback; it is a no-op when there is no key, no project,
+/// or no `quickpatch.yaml`.
+void Function() embedPatchPublicKeysInProjectYaml({
+  required String? base64PublicKey,
+  List<String> rotationPublicKeys = const [],
+}) {
+  void noop() {}
+  if (base64PublicKey == null || base64PublicKey.isEmpty) return noop;
+  final root = quickpatchEnv.getQuickPatchProjectRoot();
+  if (root == null) return noop;
+  final yaml = File(p.join(root.path, 'quickpatch.yaml'));
+  if (!yaml.existsSync()) return noop;
+  final original = yaml.readAsStringSync();
+  // Drop any pre-existing key line(s), then append this build's key(s).
+  final kept = original
+      .split('\n')
+      .where((l) => !RegExp(r'^\s*patch_public_keys?\s*:').hasMatch(l))
+      .join('\n')
+      .trimRight();
+  final buf = StringBuffer(kept)
+    ..write('\npatch_public_key: $base64PublicKey\n');
+  final rotation =
+      rotationPublicKeys.map((k) => k.trim()).where((k) => k.isNotEmpty).join(',');
+  if (rotation.isNotEmpty) buf.write('patch_public_keys: $rotation\n');
+  yaml.writeAsStringSync(buf.toString());
+  logger.detail('[engine] Embedded patch public key(s) into quickpatch.yaml.');
+  return () {
+    try {
+      yaml.writeAsStringSync(original);
+    } on FileSystemException {
+      // best-effort restore
+    }
+  };
+}
+
 /// Repoints the flutter_tools asset-injection guard at `quickpatch.yaml` so the
 /// build-time public key is embedded in QuickPatch projects. Returns whether the
 /// file was changed (false if absent, already patched, or not safely matchable).

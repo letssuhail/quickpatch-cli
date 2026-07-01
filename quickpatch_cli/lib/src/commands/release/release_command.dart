@@ -15,6 +15,7 @@ import 'package:quickpatch_cli/src/extensions/arg_results.dart';
 import 'package:quickpatch_cli/src/extensions/string.dart';
 import 'package:quickpatch_cli/src/logging/logging.dart';
 import 'package:quickpatch_cli/src/metadata/metadata.dart';
+import 'package:quickpatch_cli/src/engine_bootstrap.dart';
 import 'package:quickpatch_cli/src/platform.dart';
 import 'package:quickpatch_cli/src/platform/platform.dart';
 import 'package:quickpatch_cli/src/release_type.dart';
@@ -349,6 +350,20 @@ of the iOS app that is using this module. (aar and ios-framework only)''',
         logger.info(
           '''Building ${releaser.artifactDisplayName} with Flutter $flutterVersionString''',
         );
+        // Embed the patch public key(s) into quickpatch.yaml for the build so
+        // the bundled flutter_assets/quickpatch.yaml carries them and the
+        // on-device updater verifies patch signatures. Needed on vanilla Flutter
+        // (e.g. stable 3.44.0), which lacks the fork's flutter_tools
+        // key-injection; without it native patches ship fail-open (unsigned).
+        // Restored after the build so the developer's checked-in file is intact.
+        final restoreQuickPatchYaml = embedPatchPublicKeysInProjectYaml(
+          base64PublicKey: await releaser.getEncodedPublicKey(),
+          rotationPublicKeys: (platform.environment['SHOREBIRD_PUBLIC_KEYS'] ?? '')
+              .split(',')
+              .map((k) => k.trim())
+              .where((k) => k.isNotEmpty)
+              .toList(),
+        );
         final FileSystemEntity releaseArtifact;
         try {
           releaseArtifact = await releaser.buildReleaseArtifacts();
@@ -361,6 +376,8 @@ of the iOS app that is using this module. (aar and ios-framework only)''',
         } on Exception catch (e) {
           logger.err('Failed to build release artifacts: $e');
           throw ProcessExit(ExitCode.software.code);
+        } finally {
+          restoreQuickPatchYaml();
         }
 
         final releaseVersion = await releaser.getReleaseVersion(
