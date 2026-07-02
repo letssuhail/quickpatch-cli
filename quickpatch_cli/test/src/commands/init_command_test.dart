@@ -760,6 +760,7 @@ Please make sure you are running "quickpatch init" from within your Flutter proj
             any(
               that: contains('''
 app_id: ${appIds[0]}
+base_url: https://api.quickpatch.dev
 flavors:
   internal: ${appIds[0]}
   stable: ${appIds[1]}'''),
@@ -824,6 +825,7 @@ flavors:
             any(
               that: contains('''
 app_id: ${appIds[0]}
+base_url: https://api.quickpatch.dev
 flavors:
   development: ${appIds[0]}
   developmentInternal: ${appIds[1]}
@@ -898,6 +900,7 @@ flavors:
             any(
               that: contains('''
 app_id: ${appIds[0]}
+base_url: https://api.quickpatch.dev
 flavors:
   development: ${appIds[0]}
   developmentInternal: ${appIds[1]}
@@ -971,6 +974,7 @@ flavors:
             any(
               that: contains('''
 app_id: ${appIds[0]}
+base_url: https://api.quickpatch.dev
 flavors:
   development: ${appIds[1]}
   developmentInternal: ${appIds[2]}
@@ -1046,6 +1050,7 @@ flavors:
             any(
               that: contains('''
 app_id: ${appIds[0]}
+base_url: https://api.quickpatch.dev
 flavors:
   development: ${appIds[1]}
   developmentInternal: ${appIds[2]}
@@ -1123,6 +1128,7 @@ flavors:
             any(
               that: contains('''
 app_id: ${appIds[0]}
+base_url: https://api.quickpatch.dev
 flavors:
   development: ${appIds[0]}
   developmentInternal: ${appIds[1]}
@@ -1217,6 +1223,7 @@ flavors:
             any(
               that: contains('''
 app_id: test-appId-1
+base_url: https://api.quickpatch.dev
 flavors:
   dev: test-appId-1
   devInternal: test-appId-2
@@ -1331,6 +1338,7 @@ flavors:
               any(
                 that: contains('''
 app_id: test_app_id
+base_url: https://api.quickpatch.dev
 flavors:
   dev: test-appId-dev
   prod: test-appId-prod'''),
@@ -1423,6 +1431,7 @@ flavors:
               any(
                 that: contains('''
 app_id: test_app_id
+base_url: https://api.quickpatch.dev
 flavors:
   a: test-appId-1
   b: test-appId-2

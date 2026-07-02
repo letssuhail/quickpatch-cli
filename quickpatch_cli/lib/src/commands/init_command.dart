@@ -419,13 +419,19 @@ app_id:
       editor.update(['channel'], channel);
     }
 
-    // Bake the server URL into the config so the on-device updater queries the
-    // right server. Derived from QUICKPATCH_HOSTED_URL (the same server the CLI
-    // publishes to). Without this the updater uses its default.
+    // Bake the server URL into the config so the on-device updater queries
+    // the right server. ALWAYS written: besides patch checks, Android builds
+    // resolve the QuickPatch engine (Maven mirror) through this URL — without
+    // it they fall back to Google's CDN and get the vanilla engine with no
+    // on-device updater, silently breaking OTA. QUICKPATCH_HOSTED_URL
+    // overrides for self-hosted/staging servers.
     final hostedUrl = platform.environment['QUICKPATCH_HOSTED_URL'];
-    if (hostedUrl != null && hostedUrl.isNotEmpty) {
-      editor.update(['base_url'], hostedUrl);
-    }
+    editor.update(
+      ['base_url'],
+      (hostedUrl == null || hostedUrl.isEmpty)
+          ? 'https://api.quickpatch.dev'
+          : hostedUrl,
+    );
 
     if (flavors != null) editor.update(['flavors'], flavors);
 

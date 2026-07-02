@@ -1,3 +1,7 @@
+## 1.6.131
+
+- `quickpatch init` now always writes `base_url` into quickpatch.yaml (previously only when QUICKPATCH_HOSTED_URL was set). Without it, Android builds resolved the Flutter engine from Google's CDN and got the vanilla engine with no on-device updater — silently breaking OTA for newly initialized apps. `QUICKPATCH_HOSTED_URL` still overrides for self-hosted servers.
+
 ## 1.6.130
 
 - **Zero-config patch signing.** On the first `quickpatch release` for an app, the CLI now auto-generates an RSA-2048 key pair into a per-app key store (`<config dir>/keys/<app_id>/`, next to the CLI credentials) and embeds the public key automatically; `quickpatch patch` signs with the stored key automatically. No openssl knowledge or key flags needed. Explicit `--public-key-path`/`--private-key-path`/`--public-key-cmd`/`--sign-cmd` always override, so CI and externally-managed keys keep working unchanged. A patch for a release built without a key stays unsigned (patching is never the key-creation moment).
