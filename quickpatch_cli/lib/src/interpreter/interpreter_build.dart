@@ -762,6 +762,11 @@ Future<Map<String, dynamic>?> _qpPostCheck(int currentPatchNumber) async {
       'release_version': _releaseVersion,
       'platform': 'ios',
       'arch': 'aarch64',
+      // Stable per-install id: the server buckets staged rollouts per device
+      // (sha256(client_id:release:patch) -> 0..99 vs rollout percent). Without
+      // it every iOS device hashes to the same bucket and a percentage rollout
+      // becomes all-or-nothing.
+      'client_id': _qpClientId(),
       'current_patch_number': currentPatchNumber,
     }));
     final checkRes = await checkReq.close();

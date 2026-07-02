@@ -101,6 +101,15 @@ void main() {
         expect(src, contains("_qpReportEvent('__patch_download__'"));
         expect(src, contains("_qpReportEvent('__patch_install__'"));
         expect(src, contains("'client_id': _qpClientId()"));
+        // The patch-check request must carry the same per-install client id —
+        // the server buckets staged rollouts per device from it; without it
+        // every iOS device lands in one bucket and percent rollouts are
+        // all-or-nothing. Assert it appears in the CHECK body specifically.
+        final checkBody = src.substring(
+          src.indexOf('/api/v1/patches/check'),
+          src.indexOf('current_patch_number'),
+        );
+        expect(checkBody, contains("'client_id': _qpClientId()"));
       });
 
       test(
