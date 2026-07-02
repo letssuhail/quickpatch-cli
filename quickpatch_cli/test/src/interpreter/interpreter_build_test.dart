@@ -95,6 +95,43 @@ void main() {
         expect(src, contains('_qpWriteStaged('));
         expect(src, contains('loaded at boot'));
         expect(src, isNot(contains('reassembleApplication()')));
+        // The interpreter flow reports its own download/install telemetry
+        // (the native binary-diff updater never sees these module patches).
+        expect(src, contains('/api/v1/patches/events'));
+        expect(src, contains("_qpReportEvent('__patch_download__'"));
+        expect(src, contains("_qpReportEvent('__patch_install__'"));
+        expect(src, contains("'client_id': _qpClientId()"));
+      });
+
+      test(
+          'REGRESSION (1.6.132): server bootstrapper import set is FROZEN — '
+          'a new import changes the base library graph and breaks patch '
+          'loading unless the patcher extraImports mirror is updated in '
+          'lockstep + device-verified', () {
+        final src = InterpreterBuild.generateBootstrapperMain(
+          mode: 'server',
+          serverBaseUrl: 'https://qp.example',
+          appId: 'app-123',
+          releaseVersion: '1.0.0+1',
+          appUsesCodePush: true,
+          publicKeyBase64: 'PRIMARYKEY',
+        );
+        final imports = src
+            .split('\n')
+            .where((l) => l.startsWith('import '))
+            .toList();
+        expect(imports, [
+          "import 'dart:convert';",
+          "import 'dart:io';",
+          "import 'dart:typed_data';",
+          "import 'package:flutter/material.dart';",
+          "import 'package:flutter/services.dart' show rootBundle;",
+          "import 'package:dynamic_modules/dynamic_modules.dart';",
+          "import 'package:asn1lib/asn1lib.dart' as asn1;",
+          "import 'package:crypto/crypto.dart' as crypto;",
+          "import 'package:pointycastle/pointycastle.dart' as pc;",
+          "import 'package:quickpatch_code_push/quickpatch_code_push.dart' as qpcp;",
+        ]);
       });
 
       test('server mode with appUsesCodePush imports + retains '

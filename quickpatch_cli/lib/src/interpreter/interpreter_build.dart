@@ -452,6 +452,12 @@ Future<void> main() async {
     // The patched app rendered its first frame — it's healthy, so clear the
     // boot-failure counter.
     _qpResetBootFailures();
+    // A patched module reached its first frame == a successful install.
+    // Reported once per applied patch, regardless of auto_update (that flag
+    // only gates background OTA, not whether the running patch installed).
+    if (_qpApplied > 0) {
+      await _qpReportEvent('__patch_install__', _qpApplied, 'installed');
+    }
     if (!_autoUpdate) {
       debugPrint('QUICKPATCH: auto_update disabled; skipping OTA check');
       return;
@@ -481,6 +487,7 @@ Future<void> main() async {
       _qpWriteStaged(p);
       _qpRevertPending = false;
       debugPrint('QUICKPATCH: patch #${p.number} STAGED for next launch');
+      await _qpReportEvent('__patch_download__', p.number, 'downloaded');
     } on Object catch (e) {
       debugPrint('QUICKPATCH: OTA error ($e)');
     }
@@ -538,6 +545,7 @@ Future<void> _qpDownloadAndStage() async {
   _qpWriteStaged(p);
   _qpRevertPending = false;
   debugPrint('QUICKPATCH: patch #${p.number} STAGED for next launch');
+  await _qpReportEvent('__patch_download__', p.number, 'downloaded');
 }
 
 class _QpStaged {
@@ -560,6 +568,104 @@ Directory _qpStageDir() {
   final container = Directory.systemTemp.parent.path;
   return Directory(
       '$container/Library/Application Support/quickpatch/qp_stage');
+}
+
+// ---- download/install telemetry ----
+//
+// The native binary-diff updater reports __patch_download__/__patch_install__
+// on Android, but the interpreter's staged-module flow lives entirely in this
+// bootstrapper and is invisible to it — so the bootstrapper reports them
+// itself. INVARIANT: these helpers may only use libraries this file ALREADY
+// imports (dart:io, dart:convert, crypto). Adding an import here changes the
+// base image's library graph and breaks patch-module loading ("library ...
+// is already loaded") unless the patcher's extraImports mirror is updated in
+// lockstep — see the extraImports note in the generator.
+
+// App-private dir that survives `_qpClearStaged()` (which deletes only
+// qp_stage). Holds the persistent client id and telemetry-dedupe state, so a
+// staged-patch rollback never churns the device identity or re-counts events.
+Directory _qpDataDir() {
+  final container = Directory.systemTemp.parent.path;
+  return Directory('$container/Library/Application Support/quickpatch');
+}
+
+// A stable per-install device id, generated once and reused, so telemetry
+// counts devices — not launches. Entropy comes from process/time/sandbox-path
+// state hashed with sha256 (already imported for patch verification; no
+// dart:math, per the import invariant above). Best-effort: on any IO error we
+// fall back to a constant so a broken sandbox can't mint fresh ids every
+// launch and inflate counts.
+String _qpClientId() {
+  try {
+    final f = File('${_qpDataDir().path}/client_id');
+    if (f.existsSync()) {
+      final v = f.readAsStringSync().trim();
+      if (v.isNotEmpty) return v;
+    }
+    final seed = '$pid-${DateTime.now().microsecondsSinceEpoch}-'
+        '${Directory.systemTemp.path}-${identityHashCode(Object())}';
+    final id =
+        crypto.sha256.convert(utf8.encode(seed)).toString().substring(0, 32);
+    f.parent.createSync(recursive: true);
+    f.writeAsStringSync(id, flush: true);
+    return id;
+  } on Object {
+    return 'ios-unknown';
+  }
+}
+
+Map<String, dynamic> _qpReadReported() {
+  try {
+    final f = File('${_qpDataDir().path}/reported.json');
+    if (f.existsSync()) {
+      return jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+    }
+  } on Object {
+    // best-effort
+  }
+  return <String, dynamic>{};
+}
+
+// Report a patch lifecycle event. Fire-and-forget: never throws, never blocks
+// the app. [dedupeKey] ('downloaded' | 'installed') makes each (event, patch)
+// count at most once per install — the dedupe marker is written only after a
+// 200, so a failed send retries on the next launch.
+Future<void> _qpReportEvent(
+    String type, int patchNumber, String dedupeKey) async {
+  if (patchNumber <= 0) return;
+  try {
+    final reported = _qpReadReported();
+    if ((reported[dedupeKey] as num?)?.toInt() == patchNumber) return;
+    final client = HttpClient();
+    try {
+      final req =
+          await client.postUrl(Uri.parse('$_base/api/v1/patches/events'));
+      req.headers.contentType = ContentType.json;
+      req.write(jsonEncode({
+        'event': {
+          'app_id': _appId,
+          'arch': 'aarch64',
+          'client_id': _qpClientId(),
+          'type': type,
+          'patch_number': patchNumber,
+          'platform': 'ios',
+          'release_version': _releaseVersion,
+          'timestamp': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        }
+      }));
+      final res = await req.close();
+      await res.drain<void>();
+      if (res.statusCode != 200) return; // retry next launch
+    } finally {
+      client.close(force: true);
+    }
+    reported[dedupeKey] = patchNumber;
+    final f = File('${_qpDataDir().path}/reported.json');
+    f.parent.createSync(recursive: true);
+    f.writeAsStringSync(jsonEncode(reported), flush: true);
+  } on Object catch (e) {
+    debugPrint('QUICKPATCH: event report failed ($e)');
+  }
 }
 
 // Boot-failure counter (self-heal). Bumped before applying a staged patch and
