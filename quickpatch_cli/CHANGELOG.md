@@ -1,3 +1,12 @@
+## 1.6.129
+
+- **quickpatch_code_push works on the iOS interpreter path (prompt-driven updates).** `update()` on an interpreter release failed ("Downloaded patch file does not have valid zstd magic bytes") because it invoked the native binary-diff updater, which cannot process bytecode-module patches. The generated bootstrapper now installs `QuickPatchInterpreterOverrides` hooks (package 1.1.0) so `checkForUpdate`/`update`/`readCurrentPatch`/`readNextPatch` drive the interpreter's staged full-module flow. Device-proven end-to-end: check → consent dialog → download+stage → restart → patched.
+- **Interpreter bootstrapper honors `auto_update: false`** — the background download+stage is skipped; updates become user-driven via quickpatch_code_push (same semantics as the native updater).
+- **iOS interpreter patch no longer collides at load.** The patcher's import-dill now covers the packages the release baked into the base (quickpatch_code_push, asn1lib/crypto/pointycastle — gated on the app's package_config), so the patch module references them instead of bundling copies ("library ... is already loaded" → boot-load skipped → blank screen).
+- **A bad staged patch can no longer blank the app forever**: if the staged module fails to LOAD at boot, the stage is cleared and the bundled base is booted (previously nothing was loaded, and since the empty frame reset the crash counter the bad stage was never dropped).
+- **Engine ensure re-asserts the interpreter platform overlay**: `flutter precache`/artifact re-materialization can revert `common/flutter_patched_sdk*` to stock while the engine dir stays overlaid, breaking --interpreter builds (`Method not found: 'loadDynamicModulePatch'`). Now detected and re-overlaid from the engine's cached platform dill.
+- **iOS interpreter release hard-fails if the built archive is missing the app bytecode module** (previously such a release published and booted to a blank screen).
+
 ## 1.6.128
 
 - **Android code push on stable Flutter 3.44.0.** Stable Flutter ships a vanilla Android engine with no on-device updater, so patches couldn't apply. The build now maps the vanilla engine to the QuickPatch Android engine (which carries the updater) for the duration of the build, so `libflutter` supports OTA and the snapshot stays consistent. Device-proven: an OTA code patch applies over-the-air, and a patch signed with an untrusted key is rejected (no brick).

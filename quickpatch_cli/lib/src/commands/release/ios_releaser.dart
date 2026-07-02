@@ -216,6 +216,13 @@ If left checked, Xcode will rewrite the build number in the uploaded IPA, so the
       r'^\s*quickpatch_code_push\s*:',
       multiLine: true,
     ).hasMatch(pubspecBackup);
+    // auto_update: false in quickpatch.yaml disables the bootstrapper's
+    // background download+stage — updates are then user-driven via
+    // package:quickpatch_code_push (same semantics as the native updater).
+    final autoUpdate = !RegExp(
+      r'^\s*auto_update\s*:\s*false\s*$',
+      multiLine: true,
+    ).hasMatch(File(p.join(root, 'quickpatch.yaml')).readAsStringSync());
 
     Future<void> run(String exe, List<String> args, String label) async {
       final r = await process.run(exe, args);
@@ -235,6 +242,7 @@ If left checked, Xcode will rewrite the build number in the uploaded IPA, so the
           appId: appId,
           releaseVersion: version,
           appUsesCodePush: appUsesCodePush,
+          autoUpdate: autoUpdate,
           // SECURITY: embed the release public key so the on-device bootstrapper
           // verifies each patch's signature before applying it. Empty when no
           // --public-key was provided (unsigned mode).
@@ -450,6 +458,22 @@ If left checked, Xcode will rewrite the build number in the uploaded IPA, so the
       final appFramework = Directory(
         p.join(appDir.path, 'Frameworks', 'App.framework'),
       );
+      // The bundled bytecode module IS the app — an archive without it boots
+      // the bootstrapper with nothing to run (blank screen). A bad build
+      // state (e.g. leftovers of a failed prior run) can produce exactly
+      // that, so hard-fail before this release can be published.
+      final bundledModule = File(
+        p.join(appFramework.path, 'flutter_assets', 'assets', 'app.qpmod'),
+      );
+      if (!bundledModule.existsSync() || bundledModule.lengthSync() == 0) {
+        progress.fail(
+          'Built archive is missing the app bytecode module '
+          '(${p.relative(bundledModule.path, from: appDir.path)}) — the app '
+          'would boot to a blank screen. Clean the build (flutter clean) and '
+          'retry.',
+        );
+        throw ProcessExit(ExitCode.software.code);
+      }
       File(appDylib).copySync(p.join(appFramework.path, 'App'));
 
       // Re-sign the swapped App + frameworks + app with the same identity the

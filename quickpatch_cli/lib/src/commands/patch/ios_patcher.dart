@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -582,10 +583,30 @@ edit (new/removed/reordered code or dependencies). Revert it and re-run.''';
 
     // 1. Generate a bootstrapper + its no-link import-dill (supplies the
     //    framework so the patch module REFERENCES it, unprefixed).
+    //
+    //    The import-dill defines which libraries the patch module treats as
+    //    base-provided (external), so it must ALSO cover the packages the
+    //    RELEASE's server-mode bootstrapper baked into the base (signature
+    //    verification + code-push) — otherwise the patch module bundles its
+    //    own copies of libraries the base already holds and fails to load on
+    //    device ("library ... is already loaded"). Only packages present in
+    //    the app's package_config can collide (nothing else can be reached
+    //    from the app), and exactly those are resolvable here — so gate each
+    //    extra import on the package_config.
+    final packagesInConfig = _packageNamesInConfig(packageConfig);
+    final extraImports = <String>[
+      for (final pkg in const [
+        'quickpatch_code_push',
+        'asn1lib',
+        'crypto',
+        'pointycastle',
+      ])
+        if (packagesInConfig.contains(pkg)) 'package:$pkg/$pkg.dart',
+    ];
     File(p.join(buildDir, 'qp_bootstrap_main.dart'))
       ..createSync(recursive: true)
       ..writeAsStringSync(
-        InterpreterBuild.generateBootstrapperMain(),
+        InterpreterBuild.generateBootstrapperMain(extraImports: extraImports),
       );
     final importDill = p.join(buildDir, 'qp_bootstrap_import.dill');
     final genKernelResult = await process.run(
@@ -639,6 +660,23 @@ edit (new/removed/reordered code or dependencies). Revert it and re-run.''';
         podfileLockHash: quickpatchEnv.iosPodfileLockHash,
       ),
     };
+  }
+
+  /// Package names resolvable via the package_config.json at
+  /// [packageConfigPath]. Used to gate the patcher's extra bootstrapper
+  /// imports on what the app can actually reach.
+  Set<String> _packageNamesInConfig(String packageConfigPath) {
+    try {
+      final config = jsonDecode(File(packageConfigPath).readAsStringSync())
+          as Map<String, dynamic>;
+      return {
+        for (final pkg in (config['packages'] as List? ?? const <Object?>[]))
+          if (pkg is Map<String, dynamic> && pkg['name'] is String)
+            pkg['name'] as String,
+      };
+    } on Object {
+      return const {};
+    }
   }
 
   @override

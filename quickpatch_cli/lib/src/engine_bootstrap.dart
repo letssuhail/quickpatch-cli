@@ -90,6 +90,15 @@ Future<void> ensureQuickPatchIosEngine() async {
       stamp.readAsStringSync().trim() == engineRevision &&
       genSnapshot.existsSync() &&
       binaryEmbedsRevision(genSnapshot, engineRevision)) {
+    // The merge-loader platform overlay into the SDK's common patched-sdk(s)
+    // can be reverted independently of the engine dir (a `flutter precache` /
+    // artifact re-materialization regenerates `common/` while `ios-release/`
+    // stays overlaid) — the same class of partial-state bug as the stale
+    // gen_snapshot below. Without it, `flutter build`'s frontend_server does
+    // not know the interpreter natives and an --interpreter bootstrapper
+    // fails to compile (`Method not found: 'loadDynamicModulePatch'`).
+    // Cheap to re-assert from the engine's own cached platform dill.
+    _ensureInterpreterPlatformOverlay(cacheDir);
     logger.detail('[engine] QuickPatch iOS engine $engineRevision present.');
     return;
   }
@@ -212,6 +221,40 @@ Future<void> ensureQuickPatchIosEngine() async {
     } on Exception {
       // best-effort cleanup
     }
+  }
+}
+
+/// Re-asserts the merge-loader platform overlay in the Flutter SDK's common
+/// `flutter_patched_sdk(_product)` dirs from the engine cache's own
+/// `platform_strong.dill` ([cacheDir]). No-op for pre-interpreter bundles
+/// (no cached dill) and when the overlay is already intact (detected via the
+/// interpreter-natives marker `loadDynamicModulePatch`). Additive — the
+/// merge-loader platform is a superset of the stock one; the stock dill is
+/// preserved once as `.qpbak`.
+void _ensureInterpreterPlatformOverlay(Directory cacheDir) {
+  final mlPlatform = File(p.join(cacheDir.path, 'platform_strong.dill'));
+  if (!mlPlatform.existsSync()) return;
+  for (final sdk in ['flutter_patched_sdk', 'flutter_patched_sdk_product']) {
+    final dest = File(
+      p.join(
+        quickpatchEnv.flutterDirectory.path,
+        'bin', 'cache', 'artifacts', 'engine', 'common', sdk,
+        'platform_strong.dill',
+      ),
+    );
+    if (!dest.parent.existsSync()) continue;
+    if (dest.existsSync() &&
+        binaryEmbedsRevision(dest, 'loadDynamicModulePatch')) {
+      continue;
+    }
+    if (dest.existsSync() && !File('${dest.path}.qpbak').existsSync()) {
+      dest.copySync('${dest.path}.qpbak');
+    }
+    mlPlatform.copySync(dest.path);
+    logger.detail(
+      '[engine] re-overlaid the interpreter platform into $sdk '
+      '(was stale/stock).',
+    );
   }
 }
 

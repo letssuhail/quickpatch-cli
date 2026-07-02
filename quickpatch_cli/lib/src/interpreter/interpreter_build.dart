@@ -100,6 +100,8 @@ int loadModuleAsPatch(Uint8List bytes, String prefix) =>
     String? publicKeyBase64,
     List<String> rotationPublicKeysBase64 = const [],
     bool appUsesCodePush = false,
+    bool autoUpdate = true,
+    List<String> extraImports = const [],
   }) {
     if (mode == 'ota') {
       assert(otaPatchUrl != null, 'ota mode requires otaPatchUrl');
@@ -126,6 +128,7 @@ int loadModuleAsPatch(Uint8List bytes, String prefix) =>
         publicKeyBase64: publicKeyBase64 ?? '',
         rotationPublicKeysBase64: rotationPublicKeysBase64,
         appUsesCodePush: appUsesCodePush,
+        autoUpdate: autoUpdate,
       );
     }
     assert(mode == 'argv' || mode == 'asset', 'mode must be argv|asset|ota');
@@ -135,6 +138,16 @@ int loadModuleAsPatch(Uint8List bytes, String prefix) =>
     if (mode == 'argv') b.writeln("import 'dart:io';");
     for (final imp in frameworkImports) {
       b.writeln("import '$imp';");
+    }
+    // Extra libraries to pull into this bootstrapper's kernel. Used by the
+    // PATCHER so its import-dill (= the patch module's external-library set)
+    // covers the packages the RELEASE's server-mode bootstrapper baked into
+    // the base (signature verification + code-push). Without them the patch
+    // module bundles its own copies of libraries the base already holds and
+    // fails to load on device ("library ... is already loaded").
+    var extraIndex = 0;
+    for (final imp in extraImports) {
+      b.writeln("import '$imp' as qpx${extraIndex++}; // ignore: unused_import");
     }
     b
       ..writeln("import 'package:dynamic_modules/dynamic_modules.dart';")
@@ -266,6 +279,7 @@ int loadModuleAsPatch(Uint8List bytes, String prefix) =>
     required String publicKeyBase64,
     List<String> rotationPublicKeysBase64 = const [],
     bool appUsesCodePush = false,
+    bool autoUpdate = true,
   }) {
     final base = baseUrl.replaceAll(RegExp(r'/+$'), '');
     // The ordered set of keys the bootstrapper trusts to verify a patch:
@@ -313,7 +327,30 @@ int loadModuleAsPatch(Uint8List bytes, String prefix) =>
         ..writeln('    u.checkForUpdate, u.update, u.readCurrentPatch,')
         ..writeln('    u.readNextPatch, u.isAvailable,')
         ..writeln('  ];')
+        ..writeln('}')
+        ..writeln()
+        // Route the quickpatch_code_push public API to the interpreter's
+        // staged full-module OTA flow. The native binary-diff updater cannot
+        // process bytecode-module patches (zstd-magic mismatch), so the
+        // bootstrapper — which owns the staged-patch storage — services
+        // check/update/patch-number calls itself. The app module resolves
+        // quickpatch_code_push against THIS base copy, so the static slots
+        // set here are the ones the app's QuickPatchUpdater sees.
+        ..writeln('void _qpInstallCodePushHooks() {')
+        ..writeln(
+            '  qpcp.QuickPatchInterpreterOverrides.currentPatchNumber = () => _qpApplied;')
+        ..writeln(
+            '  qpcp.QuickPatchInterpreterOverrides.nextPatchNumber = _qpNextBootNumber;')
+        ..writeln(
+            '  qpcp.QuickPatchInterpreterOverrides.checkForDownloadableUpdate =')
+        ..writeln('      _qpCheckDownloadable;')
+        ..writeln(
+            '  qpcp.QuickPatchInterpreterOverrides.update = _qpDownloadAndStage;')
         ..writeln('}');
+    } else {
+      b
+        ..writeln()
+        ..writeln('void _qpInstallCodePushHooks() {}');
     }
     b
       ..writeln()
@@ -324,6 +361,7 @@ int loadModuleAsPatch(Uint8List bytes, String prefix) =>
       ..writeln('const _publicKeysB64 = <String>[$keysLiteral];')
       ..writeln("const _appModuleAssetKey = '$appModuleAssetKey';")
       ..writeln('const _otaDelaySeconds = $otaDelaySeconds;')
+      ..writeln('const _autoUpdate = $autoUpdate;')
       ..writeln()
       // The static body uses only the consts above; emit it raw so the
       // generated code's own `$` interpolations stay literal.
@@ -340,8 +378,20 @@ int loadModuleAsPatch(Uint8List bytes, String prefix) =>
 // Staged OTA: a downloaded patch is NEVER applied to the running session. It is
 // STAGED to disk and applied at the NEXT launch, before the first frame — so the
 // first paint is already patched (no flash of the old UI, no live reassemble).
+// The patch number the running session booted from (0 = base). Global so the
+// code-push hooks can report it.
+int _qpApplied = 0;
+
+// Set when the server rolled back the running patch: the stage is cleared and
+// the next launch boots the base, so "next boot" reports 0 until then.
+bool _qpRevertPending = false;
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Route the code-push package's updater API (if the app uses it) to the
+  // staged full-module flow below — installed before the app module runs so
+  // its very first updater call already sees the hooks.
+  _qpInstallCodePushHooks();
 
   // 1) BOOT-TIME LOAD (full-module replacement): a patch IS the
   //    whole changed app compiled to bytecode. If one is staged + re-verified,
@@ -354,7 +404,6 @@ Future<void> main() async {
   //    every launch (the crash precedes the rollback check). A boot-failure
   //    counter (bumped before load, reset after the first frame renders) drops a
   //    staged patch that has crashed repeatedly, falling back to the base.
-  var applied = 0;
   WidgetsBinding.instance.deferFirstFrame();
   final pre = _qpReadStaged();
   if (pre != null && _qpBumpBootFailures() > 2) {
@@ -364,15 +413,29 @@ Future<void> main() async {
   }
   try {
     final staged = _qpReadStaged();
+    var loadedStaged = false;
     if (staged != null) {
-      await loadModuleFromBytes(staged.bytes); // patched app main() -> runApp
-      applied = staged.number;
-      debugPrint('QUICKPATCH: staged patch #${staged.number} loaded at boot');
-    } else {
+      try {
+        await loadModuleFromBytes(staged.bytes); // patched app main() -> runApp
+        _qpApplied = staged.number;
+        loadedStaged = true;
+        debugPrint('QUICKPATCH: staged patch #${staged.number} loaded at boot');
+      } on Object catch (e) {
+        // A staged patch that fails to LOAD (not crash) would otherwise leave
+        // the app blank forever: the failure renders an empty frame, which
+        // resets the crash counter, so the bad stage is never dropped. Clear
+        // it and fall back to the bundled base.
+        debugPrint(
+            'QUICKPATCH: staged patch #${staged.number} failed to load ($e); '
+            'clearing stage and falling back to base');
+        _qpClearStaged();
+      }
+    }
+    if (!loadedStaged) {
       final appBytes =
           (await rootBundle.load(_appModuleAssetKey)).buffer.asUint8List();
       await loadModuleFromBytes(appBytes); // base app main() -> runApp
-      debugPrint('QUICKPATCH: no staged patch; running base');
+      debugPrint('QUICKPATCH: running base');
     }
   } on Object catch (e) {
     debugPrint('QUICKPATCH: boot-load skipped ($e)');
@@ -381,25 +444,33 @@ Future<void> main() async {
   }
 
   // 2) BACKGROUND DOWNLOAD (after first frame): fetch a newer patch and STAGE
-  //    it for the next launch. Never applied live.
+  //    it for the next launch. Never applied live. Skipped when auto_update is
+  //    disabled in quickpatch.yaml — updates are then user-driven via the
+  //    code-push package (checkForUpdate/update), which the hooks above
+  //    service.
   WidgetsBinding.instance.addPostFrameCallback((_) async {
     // The patched app rendered its first frame — it's healthy, so clear the
     // boot-failure counter.
     _qpResetBootFailures();
+    if (!_autoUpdate) {
+      debugPrint('QUICKPATCH: auto_update disabled; skipping OTA check');
+      return;
+    }
     await Future<void>.delayed(const Duration(seconds: _otaDelaySeconds));
     try {
       debugPrint(
-          'QUICKPATCH: OTA check (release=$_releaseVersion, have=#$applied)');
-      final res = await _qpCheckServer(applied);
+          'QUICKPATCH: OTA check (release=$_releaseVersion, have=#$_qpApplied)');
+      final res = await _qpCheckServer(_qpApplied);
       if (res == null) {
         debugPrint('QUICKPATCH: OTA check unavailable');
         return;
       }
       // A server rollback of the patch we are running -> drop the stage so the
       // next launch reverts to the base.
-      if (res.rolledBack.contains(applied) && applied != 0) {
+      if (res.rolledBack.contains(_qpApplied) && _qpApplied != 0) {
         _qpClearStaged();
-        debugPrint('QUICKPATCH: patch #$applied rolled back; staged cleared');
+        _qpRevertPending = true;
+        debugPrint('QUICKPATCH: patch #$_qpApplied rolled back; staged cleared');
         return;
       }
       final p = res.patch;
@@ -408,11 +479,65 @@ Future<void> main() async {
         return;
       }
       _qpWriteStaged(p);
+      _qpRevertPending = false;
       debugPrint('QUICKPATCH: patch #${p.number} STAGED for next launch');
     } on Object catch (e) {
       debugPrint('QUICKPATCH: OTA error ($e)');
     }
   });
+}
+
+// ---- code-push hook implementations (staged full-module flow) ----
+
+// The patch number that boots on the NEXT launch: the staged patch if any,
+// the base (0) after a rollback, else whatever is running now.
+int _qpNextBootNumber() {
+  if (_qpRevertPending) return 0;
+  return _qpReadStaged()?.number ?? _qpApplied;
+}
+
+// True when the server has a patch newer than what is running/staged.
+// Check-only: does NOT download. Also observes a server rollback of the
+// running patch (clears the stage so the next launch reverts to the base).
+Future<bool> _qpCheckDownloadable() async {
+  final have = _qpReadStaged()?.number ?? _qpApplied;
+  final body = await _qpPostCheck(have);
+  if (body == null) return false;
+  final rolled = (body['rolled_back_patch_numbers'] as List?)
+          ?.map((e) => (e as num).toInt())
+          .toList() ??
+      const <int>[];
+  if (rolled.contains(_qpApplied) && _qpApplied != 0) {
+    _qpClearStaged();
+    _qpRevertPending = true;
+    debugPrint('QUICKPATCH: patch #$_qpApplied rolled back; staged cleared');
+  }
+  if (body['patch_available'] != true) return false;
+  final number =
+      ((body['patch'] as Map<String, dynamic>?)?['number'] as num?)?.toInt() ??
+          0;
+  return number > have;
+}
+
+// Download + verify + stage the newest patch for the next launch (the
+// user-consented "update now" path). Throws on failure so the caller can
+// surface it.
+Future<void> _qpDownloadAndStage() async {
+  final res = await _qpCheckServer(_qpApplied);
+  if (res == null) {
+    throw StateError('patch check failed (network or server error)');
+  }
+  if (res.rolledBack.contains(_qpApplied) && _qpApplied != 0) {
+    _qpClearStaged();
+    _qpRevertPending = true;
+    debugPrint('QUICKPATCH: patch #$_qpApplied rolled back; staged cleared');
+    return;
+  }
+  final p = res.patch;
+  if (p == null) return; // already up to date
+  _qpWriteStaged(p);
+  _qpRevertPending = false;
+  debugPrint('QUICKPATCH: patch #${p.number} STAGED for next launch');
 }
 
 class _QpStaged {
@@ -516,10 +641,10 @@ void _qpClearStaged() {
   if (dir.existsSync()) dir.deleteSync(recursive: true);
 }
 
-// Query the patch-check API. Downloads + verifies a newer patch (returned in
-// `patch`) and surfaces any `rolled_back_patch_numbers`. Returns null only on
-// a transport/HTTP failure (so the caller leaves the current stage untouched).
-Future<_QpCheck?> _qpCheckServer(int currentPatchNumber) async {
+// POST the patch-check API and return the parsed response body. Returns null
+// only on a transport/HTTP failure (so callers leave the current stage
+// untouched). Check-only: never downloads.
+Future<Map<String, dynamic>?> _qpPostCheck(int currentPatchNumber) async {
   final client = HttpClient();
   try {
     final checkReq =
@@ -535,20 +660,35 @@ Future<_QpCheck?> _qpCheckServer(int currentPatchNumber) async {
     }));
     final checkRes = await checkReq.close();
     if (checkRes.statusCode != 200) return null;
-    final body = jsonDecode(await checkRes.transform(utf8.decoder).join())
+    return jsonDecode(await checkRes.transform(utf8.decoder).join())
         as Map<String, dynamic>;
-    final rolled = (body['rolled_back_patch_numbers'] as List?)
-            ?.map((e) => (e as num).toInt())
-            .toList() ??
-        const <int>[];
-    if (body['patch_available'] != true) {
-      return _QpCheck(null, rolled);
-    }
-    final patch = body['patch'] as Map<String, dynamic>;
-    final number = (patch['number'] as num?)?.toInt() ?? 0;
-    final url = patch['download_url'] as String;
-    final hash = patch['hash'] as String?;
-    final sig = patch['hash_signature'] as String?;
+  } on Object {
+    return null;
+  } finally {
+    client.close(force: true);
+  }
+}
+
+// Query the patch-check API. Downloads + verifies a newer patch (returned in
+// `patch`) and surfaces any `rolled_back_patch_numbers`. Returns null only on
+// a transport/HTTP failure (so the caller leaves the current stage untouched).
+Future<_QpCheck?> _qpCheckServer(int currentPatchNumber) async {
+  final body = await _qpPostCheck(currentPatchNumber);
+  if (body == null) return null;
+  final rolled = (body['rolled_back_patch_numbers'] as List?)
+          ?.map((e) => (e as num).toInt())
+          .toList() ??
+      const <int>[];
+  if (body['patch_available'] != true) {
+    return _QpCheck(null, rolled);
+  }
+  final patch = body['patch'] as Map<String, dynamic>;
+  final number = (patch['number'] as num?)?.toInt() ?? 0;
+  final url = patch['download_url'] as String;
+  final hash = patch['hash'] as String?;
+  final sig = patch['hash_signature'] as String?;
+  final client = HttpClient();
+  try {
     final dlRes = await (await client.getUrl(Uri.parse(url))).close();
     if (dlRes.statusCode != 200) return _QpCheck(null, rolled);
     final bb = BytesBuilder(copy: false);
