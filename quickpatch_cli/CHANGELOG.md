@@ -1,3 +1,7 @@
+## 1.6.136
+
+- **`quickpatch flutter versions list` now lists the versions QuickPatch actually supports.** It previously listed the pinned Flutter fork's git tags (3.41.x etc.), most of which have no QuickPatch engine and cannot `release`/`patch` - misleading. The command now reads the server's `/api/v1/engine-versions` registry (the authoritative list of versions with a built + hosted engine) and marks the current version; `--json` adds a `supported_versions` array with flutter/engine revisions. If the registry is unreachable (offline / self-hosted without it), it falls back to the old tag list with a clear warning.
+
 ## 1.6.135
 
 - **iOS staged rollouts now gate per device.** The interpreter bootstrapper's patch-check request now carries the persistent per-install `client_id` (the same id used for download/install telemetry). The server buckets staged rollouts per device — `sha256(client_id:release:patch) → 0..99` compared against the rollout percent — so without a client id every iOS device hashed to the same bucket and a percentage rollout was effectively all-or-nothing. Android already sent it (native updater); no server change needed (the check endpoint already accepted `client_id`). Parity-safe: no bootstrapper import changes (the frozen-import regression test still passes). Rebuild the iOS release with ≥1.6.135 for per-device staged rollouts.

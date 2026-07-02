@@ -42,7 +42,7 @@ void main() {
 
     test('has correct name and description', () {
       expect(command.name, equals('list'));
-      expect(command.description, equals('List available Flutter versions.'));
+      expect(command.description, equals('List the Flutter versions QuickPatch supports.'));
     });
 
     test(

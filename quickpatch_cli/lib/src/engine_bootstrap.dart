@@ -283,33 +283,61 @@ bool binaryEmbedsRevision(File file, String revision) {
 /// (already required for the engine download) with a short timeout so a slow or
 /// unreachable server never stalls a build.
 Future<Map<String, String>> _fetchEngineVersionMap() async {
+  final map = <String, String>{};
+  for (final e in await fetchEngineVersionRegistry()) {
+    if (e.flutterRevision.isNotEmpty && e.engineRevision.isNotEmpty) {
+      map[e.flutterRevision] = e.engineRevision;
+    }
+  }
+  return map;
+}
+
+/// One entry of the server's engine-version registry: a Flutter version
+/// QuickPatch actually has an engine built + hosted for.
+typedef EngineRegistryEntry = ({
+  String flutterVersion,
+  String flutterRevision,
+  String engineRevision,
+});
+
+/// Fetches the server's `/api/v1/engine-versions` registry — the authoritative
+/// list of Flutter versions QuickPatch supports (only these have QuickPatch
+/// engines on the CDN; the pinned fork's git tags are a superset and NOT all
+/// usable). Best-effort: returns an empty list on any failure (no network,
+/// server down, bad JSON) so callers can fall back.
+Future<List<EngineRegistryEntry>> fetchEngineVersionRegistry() async {
   try {
     final base = quickpatchEnv.hostedUri;
-    if (base == null) return const {};
+    if (base == null) return const [];
     final url =
         '${base.toString().replaceAll(RegExp(r'/+$'), '')}/api/v1/engine-versions';
     final result = await Process.run('curl', [
       '-fsSL', '--max-time', '10', url,
     ]);
-    if (result.exitCode != 0) return const {};
+    if (result.exitCode != 0) return const [];
     final decoded = jsonDecode(result.stdout as String);
-    if (decoded is! Map<String, dynamic>) return const {};
+    if (decoded is! Map<String, dynamic>) return const [];
     final versions = decoded['versions'];
-    if (versions is! List) return const {};
-    final map = <String, String>{};
+    if (versions is! List) return const [];
+    final entries = <EngineRegistryEntry>[];
     for (final v in versions) {
       if (v is Map<String, dynamic>) {
+        final fv = v['flutterVersion'];
         final fr = v['flutterRevision'];
         final er = v['engineRevision'];
         if (fr is String && er is String && fr.isNotEmpty && er.isNotEmpty) {
-          map[fr] = er;
+          entries.add((
+            flutterVersion: fv is String && fv.isNotEmpty ? fv : fr,
+            flutterRevision: fr,
+            engineRevision: er,
+          ));
         }
       }
     }
-    return map;
+    return entries;
   } on Object {
     // Never let registry resolution break a build — fall back to the constant.
-    return const {};
+    return const [];
   }
 }
 
