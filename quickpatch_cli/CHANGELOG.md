@@ -1,3 +1,7 @@
+## 1.6.132
+
+- **iOS interpreter releases now report download/install telemetry.** The dashboard showed `0 downloads / 0 installs` for working iOS patches because the interpreter's staged-module OTA flow (the generated bootstrapper) is invisible to the native binary-diff updater that emits those events on Android. The bootstrapper now reports `__patch_download__` when it stages a patch and `__patch_install__` when a patched module reaches its first frame — using a persistent per-install `client_id` and once-per-patch dedupe (these are per-device counters, not per-launch). Fire-and-forget: reporting never blocks or fails the app. Rebuild the iOS release with ≥1.6.132 for counts to appear. (Server-side companion: iOS `__patch_update_failure__` from the native binary-diff updater — always a zstd-magic mismatch on module patches — is no longer counted as a failure.)
+
 ## 1.6.131
 
 - `quickpatch init` now always writes `base_url` into quickpatch.yaml (previously only when QUICKPATCH_HOSTED_URL was set). Without it, Android builds resolved the Flutter engine from Google's CDN and got the vanilla engine with no on-device updater — silently breaking OTA for newly initialized apps. `QUICKPATCH_HOSTED_URL` still overrides for self-hosted servers.

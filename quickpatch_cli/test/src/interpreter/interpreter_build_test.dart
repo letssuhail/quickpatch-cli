@@ -90,11 +90,17 @@ void main() {
         expect(src, contains("body['patch_available']"));
         expect(src, contains("['download_url']"));
         // Shorebird-style: apply the STAGED patch at boot before the first
-        // frame, and NEVER hot-swap the running session.
-        expect(src, contains("loadModuleAsPatch(staged.bytes, '')"));
+        // frame (full-module load), and NEVER hot-swap the running session.
+        expect(src, contains('loadModuleFromBytes(staged.bytes)'));
         expect(src, contains('_qpWriteStaged('));
-        expect(src, contains('applied at boot'));
+        expect(src, contains('loaded at boot'));
         expect(src, isNot(contains('reassembleApplication()')));
+        // The iOS interpreter flow reports its own download/install telemetry
+        // (the native binary-diff updater never sees these module patches).
+        expect(src, contains('/api/v1/patches/events'));
+        expect(src, contains("_qpReportEvent('__patch_download__'"));
+        expect(src, contains("_qpReportEvent('__patch_install__'"));
+        expect(src, contains("'client_id': _qpClientId()"));
       });
 
       test('server mode with appUsesCodePush imports + retains '
