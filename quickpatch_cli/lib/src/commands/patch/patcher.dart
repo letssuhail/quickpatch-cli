@@ -16,6 +16,7 @@ import 'package:quickpatch_cli/src/platform/platform.dart';
 import 'package:quickpatch_cli/src/release_type.dart';
 import 'package:quickpatch_cli/src/quickpatch_documentation.dart';
 import 'package:quickpatch_cli/src/quickpatch_env.dart';
+import 'package:quickpatch_cli/src/signing_keys.dart';
 import 'package:quickpatch_cli/src/third_party/flutter_tools/lib/flutter_tools.dart';
 import 'package:quickpatch_code_push_client/quickpatch_code_push_client.dart';
 import 'package:quickpatch_code_push_protocol/quickpatch_code_push_protocol.dart';
@@ -178,6 +179,16 @@ More info: ${troubleshootingUrl.toLink()}.
     if (privateKeyFile != null) {
       return (hash) async =>
           codeSigner.sign(message: hash, privateKeyPemFile: privateKeyFile);
+    }
+
+    // Zero-config signing: fall back to the per-app key store (populated by
+    // the patch command when no key flags were passed).
+    final defaultPrivateKey = SigningKeyDefaults.privateKey;
+    if (defaultPrivateKey != null && defaultPrivateKey.existsSync()) {
+      return (hash) async => codeSigner.sign(
+            message: hash,
+            privateKeyPemFile: defaultPrivateKey,
+          );
     }
 
     final signCmd = argResults[CommonArguments.signCmd.name] as String?;

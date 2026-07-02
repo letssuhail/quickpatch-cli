@@ -27,6 +27,7 @@ import 'package:quickpatch_cli/src/quickpatch_command.dart';
 import 'package:quickpatch_cli/src/quickpatch_env.dart';
 import 'package:quickpatch_cli/src/quickpatch_flutter.dart';
 import 'package:quickpatch_cli/src/quickpatch_validator.dart';
+import 'package:quickpatch_cli/src/signing_keys.dart';
 import 'package:quickpatch_cli/src/third_party/flutter_tools/lib/flutter_tools.dart';
 import 'package:quickpatch_cli/src/version.dart';
 import 'package:quickpatch_code_push_client/quickpatch_code_push_client.dart';
@@ -253,6 +254,36 @@ NOTE: this is ${styleBold.wrap('not')} recommended. Asset changes cannot be incl
         '''The --staging flag is deprecated and will be removed in a future release. Use --track=staging instead.''',
       );
       return ExitCode.usage.code;
+    }
+
+    // Zero-config signing: when the user passes no key flags and the app has
+    // a stored key pair (created at release time), sign with it
+    // automatically. Patches are NOT the key-creation moment — a patch for a
+    // release built without a key must stay unsigned, so absent keys are
+    // fine. Explicit flags always win.
+    SigningKeyDefaults.clear();
+    final hasExplicitKeyConfig =
+        results.wasParsed(CommonArguments.publicKeyArg.name) ||
+        results.wasParsed(CommonArguments.privateKeyArg.name) ||
+        results.wasParsed(CommonArguments.publicKeyCmd.name) ||
+        results.wasParsed(CommonArguments.signCmd.name);
+    if (!hasExplicitKeyConfig) {
+      try {
+        if (quickpatchEnv.getQuickPatchYaml() != null) {
+          final keys = readAppSigningKeys(appId);
+          if (keys != null) {
+            SigningKeyDefaults.publicKey = keys.publicKey;
+            SigningKeyDefaults.privateKey = keys.privateKey;
+            logger.info(
+              '🔑 Signing with the stored key for this app '
+              '(${signingKeyDirectory(appId).path}).',
+            );
+          }
+        }
+      } on Object {
+        // Best-effort: a patch for an unsigned release stays unsigned.
+        SigningKeyDefaults.clear();
+      }
     }
 
     final patcherFutures = results.releaseTypes
@@ -600,7 +631,8 @@ Building patch with Flutter $flutterVersionString
           inferredReleaseVersion: inferredReleaseVersion,
           isSigned:
               results.wasParsed(CommonArguments.privateKeyArg.name) ||
-              results.wasParsed(CommonArguments.signCmd.name),
+              results.wasParsed(CommonArguments.signCmd.name) ||
+              SigningKeyDefaults.privateKey != null,
           environment: BuildEnvironmentMetadata(
             flutterRevision: quickpatchEnv.flutterRevision,
             operatingSystem: platform.operatingSystem,

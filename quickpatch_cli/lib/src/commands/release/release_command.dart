@@ -19,6 +19,7 @@ import 'package:quickpatch_cli/src/engine_bootstrap.dart';
 import 'package:quickpatch_cli/src/platform.dart';
 import 'package:quickpatch_cli/src/platform/platform.dart';
 import 'package:quickpatch_cli/src/release_type.dart';
+import 'package:quickpatch_cli/src/signing_keys.dart';
 import 'package:quickpatch_cli/src/quickpatch_command.dart';
 import 'package:quickpatch_cli/src/quickpatch_documentation.dart';
 import 'package:quickpatch_cli/src/quickpatch_env.dart';
@@ -206,6 +207,35 @@ of the iOS app that is using this module. (aar and ios-framework only)''',
         '''No platforms were provided. Use the --platforms argument to provide one or more platforms''',
       );
       return ExitCode.usage.code;
+    }
+
+    // Zero-config signing: when the user passes no key flags, use (and on
+    // the app's first release, generate) the per-app key pair from the key
+    // store — releases then embed the public key and patches are signed
+    // without the user ever handling .pem files. Explicit flags always win.
+    SigningKeyDefaults.clear();
+    final hasExplicitKeyConfig =
+        results.wasParsed(CommonArguments.publicKeyArg.name) ||
+        results.wasParsed(CommonArguments.publicKeyCmd.name);
+    if (!hasExplicitKeyConfig) {
+      try {
+        if (quickpatchEnv.getQuickPatchYaml() != null) {
+          final keys = await ensureAppSigningKeys(appId);
+          SigningKeyDefaults.publicKey = keys.publicKey;
+          logger.detail(
+            'Signing with the stored key for $appId '
+            '(${signingKeyDirectory(appId).path}).',
+          );
+        }
+      } on Object catch (error) {
+        // Best-effort: releases remain possible without signing keys.
+        logger.warn(
+          'Could not prepare automatic signing keys ($error). '
+          'Proceeding WITHOUT patch signing — pass --public-key-path to '
+          'sign, or install openssl for automatic key generation.',
+        );
+        SigningKeyDefaults.clear();
+      }
     }
 
     final releaserFutures = results.releaseTypes

@@ -1,3 +1,7 @@
+## 1.6.130
+
+- **Zero-config patch signing.** On the first `quickpatch release` for an app, the CLI now auto-generates an RSA-2048 key pair into a per-app key store (`<config dir>/keys/<app_id>/`, next to the CLI credentials) and embeds the public key automatically; `quickpatch patch` signs with the stored key automatically. No openssl knowledge or key flags needed. Explicit `--public-key-path`/`--private-key-path`/`--public-key-cmd`/`--sign-cmd` always override, so CI and externally-managed keys keep working unchanged. A patch for a release built without a key stays unsigned (patching is never the key-creation moment).
+
 ## 1.6.129
 
 - **quickpatch_code_push works on the iOS interpreter path (prompt-driven updates).** `update()` on an interpreter release failed ("Downloaded patch file does not have valid zstd magic bytes") because it invoked the native binary-diff updater, which cannot process bytecode-module patches. The generated bootstrapper now installs `QuickPatchInterpreterOverrides` hooks (package 1.1.0) so `checkForUpdate`/`update`/`readCurrentPatch`/`readNextPatch` drive the interpreter's staged full-module flow. Device-proven end-to-end: check → consent dialog → download+stage → restart → patched.

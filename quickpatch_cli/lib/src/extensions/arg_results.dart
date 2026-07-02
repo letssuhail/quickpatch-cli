@@ -8,6 +8,7 @@ import 'package:quickpatch_cli/src/common_arguments.dart';
 import 'package:quickpatch_cli/src/extensions/file.dart';
 import 'package:quickpatch_cli/src/logging/logging.dart';
 import 'package:quickpatch_cli/src/release_type.dart';
+import 'package:quickpatch_cli/src/signing_keys.dart';
 import 'package:quickpatch_cli/src/third_party/flutter_tools/lib/flutter_tools.dart';
 
 /// Extension on [ArgResults] to make it easier to work with options.
@@ -114,12 +115,20 @@ extension CodeSign on ArgResults {
       return codeSigner.runPublicKeyCmd(publicKeyCmd);
     }
 
+    // Zero-config signing: fall back to the per-app key store (populated by
+    // the release/patch commands when no key flags were passed).
+    final defaultKey = SigningKeyDefaults.publicKey;
+    if (defaultKey != null && defaultKey.existsSync()) {
+      return defaultKey.readAsStringSync();
+    }
+
     return null;
   }
 
   /// Read the public key file and encode it to base64 if any.
   String? get encodedPublicKey {
-    final publicKeyFile = file(CommonArguments.publicKeyArg.name);
+    final publicKeyFile =
+        file(CommonArguments.publicKeyArg.name) ?? SigningKeyDefaults.publicKey;
 
     return publicKeyFile != null
         ? codeSigner.base64PublicKey(publicKeyFile)
