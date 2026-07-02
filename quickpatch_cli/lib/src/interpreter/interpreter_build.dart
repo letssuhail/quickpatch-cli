@@ -296,7 +296,6 @@ int loadModuleAsPatch(Uint8List bytes, String prefix) =>
       ..writeln('// AUTO-GENERATED QuickPatch server-OTA bootstrapper.')
       ..writeln("import 'dart:convert';")
       ..writeln("import 'dart:io';")
-      ..writeln("import 'dart:math' show Random;")
       ..writeln("import 'dart:typed_data';");
     for (final imp in frameworkImports) {
       b.writeln("import '$imp';");
@@ -453,12 +452,6 @@ Future<void> main() async {
     // The patched app rendered its first frame — it's healthy, so clear the
     // boot-failure counter.
     _qpResetBootFailures();
-    // A patched module reached its first frame == a successful install. Report
-    // it once per applied patch, regardless of auto_update (that flag only
-    // governs background OTA, not whether the running patch installed).
-    if (_qpApplied > 0) {
-      await _qpReportEvent('__patch_install__', _qpApplied, 'installed');
-    }
     if (!_autoUpdate) {
       debugPrint('QUICKPATCH: auto_update disabled; skipping OTA check');
       return;
@@ -488,7 +481,6 @@ Future<void> main() async {
       _qpWriteStaged(p);
       _qpRevertPending = false;
       debugPrint('QUICKPATCH: patch #${p.number} STAGED for next launch');
-      await _qpReportEvent('__patch_download__', p.number, 'downloaded');
     } on Object catch (e) {
       debugPrint('QUICKPATCH: OTA error ($e)');
     }
@@ -546,7 +538,6 @@ Future<void> _qpDownloadAndStage() async {
   _qpWriteStaged(p);
   _qpRevertPending = false;
   debugPrint('QUICKPATCH: patch #${p.number} STAGED for next launch');
-  await _qpReportEvent('__patch_download__', p.number, 'downloaded');
 }
 
 class _QpStaged {
@@ -569,92 +560,6 @@ Directory _qpStageDir() {
   final container = Directory.systemTemp.parent.path;
   return Directory(
       '$container/Library/Application Support/quickpatch/qp_stage');
-}
-
-// App-private data dir that survives `_qpClearStaged()` (which deletes only
-// qp_stage). Holds the persistent client id and telemetry-dedupe state, so a
-// staged-patch rollback never churns the device identity or re-counts events.
-Directory _qpDataDir() {
-  final container = Directory.systemTemp.parent.path;
-  return Directory('$container/Library/Application Support/quickpatch');
-}
-
-// A stable per-install device id, generated once and reused. Keeps
-// download/install telemetry counting real devices (not launches). Best-effort:
-// on any IO error we fall back to a constant so a broken sandbox can't spam new
-// ids (which would inflate counts).
-String _qpClientId() {
-  try {
-    final f = File('${_qpDataDir().path}/client_id');
-    if (f.existsSync()) {
-      final v = f.readAsStringSync().trim();
-      if (v.isNotEmpty) return v;
-    }
-    final r = Random.secure();
-    final id = List<int>.generate(16, (_) => r.nextInt(256))
-        .map((b) => b.toRadixString(16).padLeft(2, '0'))
-        .join();
-    f.parent.createSync(recursive: true);
-    f.writeAsStringSync(id, flush: true);
-    return id;
-  } on Object {
-    return 'ios-unknown';
-  }
-}
-
-Map<String, dynamic> _qpReadReported() {
-  try {
-    final f = File('${_qpDataDir().path}/reported.json');
-    if (f.existsSync()) {
-      return jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
-    }
-  } on Object {
-    // best-effort
-  }
-  return <String, dynamic>{};
-}
-
-// Report a patch lifecycle event to the dashboard. The native binary-diff
-// updater emits download/install events on Android, but the iOS interpreter's
-// staged-module flow lives entirely here and is invisible to it — so we report
-// them ourselves. Fire-and-forget: never throws, never blocks the app.
-// [dedupeKey] ('downloaded' | 'installed') makes each (event, patch) count at
-// most once per install, since these are per-device counters, not per-launch.
-Future<void> _qpReportEvent(String type, int patchNumber, String dedupeKey) async {
-  if (patchNumber <= 0) return;
-  try {
-    final reported = _qpReadReported();
-    if ((reported[dedupeKey] as num?)?.toInt() == patchNumber) return;
-    final client = HttpClient();
-    try {
-      final req =
-          await client.postUrl(Uri.parse('$_base/api/v1/patches/events'));
-      req.headers.contentType = ContentType.json;
-      req.write(jsonEncode({
-        'event': {
-          'app_id': _appId,
-          'arch': 'aarch64',
-          'client_id': _qpClientId(),
-          'type': type,
-          'patch_number': patchNumber,
-          'platform': 'ios',
-          'release_version': _releaseVersion,
-          'timestamp': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        }
-      }));
-      final res = await req.close();
-      await res.drain<void>();
-      if (res.statusCode != 200) return; // retry next launch
-    } finally {
-      client.close(force: true);
-    }
-    reported[dedupeKey] = patchNumber;
-    final f = File('${_qpDataDir().path}/reported.json');
-    f.parent.createSync(recursive: true);
-    f.writeAsStringSync(jsonEncode(reported), flush: true);
-  } on Object catch (e) {
-    debugPrint('QUICKPATCH: event report failed ($e)');
-  }
 }
 
 // Boot-failure counter (self-heal). Bumped before applying a staged patch and

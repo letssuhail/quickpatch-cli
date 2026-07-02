@@ -95,12 +95,6 @@ void main() {
         expect(src, contains('_qpWriteStaged('));
         expect(src, contains('loaded at boot'));
         expect(src, isNot(contains('reassembleApplication()')));
-        // The iOS interpreter flow reports its own download/install telemetry
-        // (the native binary-diff updater never sees these module patches).
-        expect(src, contains('/api/v1/patches/events'));
-        expect(src, contains("_qpReportEvent('__patch_download__'"));
-        expect(src, contains("_qpReportEvent('__patch_install__'"));
-        expect(src, contains("'client_id': _qpClientId()"));
       });
 
       test('server mode with appUsesCodePush imports + retains '

@@ -1,6 +1,10 @@
-## 1.6.132
+## 1.6.133
 
-- **iOS interpreter releases now report download/install telemetry.** The dashboard showed `0 downloads / 0 installs` for working iOS patches because the interpreter's staged-module OTA flow (the generated bootstrapper) is invisible to the native binary-diff updater that emits those events on Android. The bootstrapper now reports `__patch_download__` when it stages a patch and `__patch_install__` when a patched module reaches its first frame — using a persistent per-install `client_id` and once-per-patch dedupe (these are per-device counters, not per-launch). Fire-and-forget: reporting never blocks or fails the app. Rebuild the iOS release with ≥1.6.132 for counts to appear. (Server-side companion: iOS `__patch_update_failure__` from the native binary-diff updater — always a zstd-magic mismatch on module patches — is no longer counted as a failure.)
+- **Revert the 1.6.132 iOS download/install telemetry change — it broke patch application.** Adding an `import 'dart:math'` (+ telemetry helpers) to the release's server-mode bootstrapper changed the base image's library set without a matching update to the patcher's `extraImports` mirror. A patch built against the un-mirrored import-dill then bundles its own copy of a library the base already holds and fails to load on device ("library ... is already loaded") — the staged patch never applies. Reverted the bootstrapper to the byte-identical 1.6.131 generator so releases + patches are consistent again. iOS download/install telemetry is deferred until it can be added without perturbing the base/patch library parity (and verified with a real on-device build). The server-side fix (not counting iOS binary-diff `__patch_update_failure__` as a failure) is unaffected and stays.
+
+## 1.6.132 (yanked — breaks iOS patch application; use 1.6.133)
+
+- iOS interpreter releases report download/install telemetry from the bootstrapper. **Superseded/yanked**: the `dart:math` import it added to the base broke patch-module loading (see 1.6.133). Do not use for iOS releases.
 
 ## 1.6.131
 
