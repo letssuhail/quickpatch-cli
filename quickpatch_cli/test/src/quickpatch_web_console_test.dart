@@ -10,10 +10,10 @@ void main() {
       );
     });
 
-    test('appReleaseUri returns the correct uri to an app release', () {
+    test('appReleaseUri returns the dashboard uri', () {
       expect(
         QuickPatchWebConsole.appReleaseUri('appId', 123),
-        Uri.parse('https://console.quickpatch.dev/apps/appId/releases/123'),
+        Uri.parse('https://console.quickpatch.dev/dashboard'),
       );
     });
   });

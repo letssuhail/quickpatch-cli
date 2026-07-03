@@ -1,3 +1,7 @@
+## 1.6.137
+
+- **`quickpatch doctor` and console links now use QuickPatch's real branded domains.** The doctor network check previously probed `console.quickpatch.dev` (never provisioned) and `cdn.quickpatch.cloud` (never provisioned), plus two legacy Google Cloud endpoints (`oauth2.googleapis.com` / `storage.googleapis.com`) inherited from the old GCS setup that QuickPatch no longer uses - so two checks always failed and two were misleadingly green. It now checks the three hosts QuickPatch actually talks to: `api.quickpatch.dev` (backend), `console.quickpatch.dev` (web dashboard, now live), and `cdn.quickpatch.dev` (R2 artifact/engine CDN). The "manage this release" link printed on an active-release conflict now points at `console.quickpatch.dev` as well.
+
 ## 1.6.136
 
 - **`quickpatch flutter versions list` now lists the versions QuickPatch actually supports.** It previously listed the pinned Flutter fork's git tags (3.41.x etc.), most of which have no QuickPatch engine and cannot `release`/`patch` - misleading. The command now reads the server's `/api/v1/engine-versions` registry (the authoritative list of versions with a built + hosted engine) and marks the current version; `--json` adds a `supported_versions` array with flutter/engine revisions. If the registry is unreachable (offline / self-hosted without it), it falls back to the old tag list with a clear warning.

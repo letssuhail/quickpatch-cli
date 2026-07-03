@@ -35,12 +35,15 @@ class NetworkCheckerException implements Exception {
 /// {@endtemplate}
 class NetworkChecker {
   /// The URLs to check for network reachability.
+  ///
+  /// These are the hosts QuickPatch actually talks to:
+  ///  - the backend API (releases, patches, auth),
+  ///  - the web dashboard, and
+  ///  - the R2 CDN that serves engine + patch artifacts.
   static final urlsToCheck = [
     'https://api.quickpatch.dev',
     'https://console.quickpatch.dev',
-    'https://oauth2.googleapis.com',
-    'https://storage.googleapis.com',
-    'https://cdn.quickpatch.cloud',
+    'https://cdn.quickpatch.dev',
   ].map(Uri.parse).toList();
 
   /// Verify that each of [urlsToCheck] responds to an HTTP GET request.
